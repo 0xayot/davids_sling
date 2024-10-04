@@ -1,0 +1,4 @@
+{
+  "rust-analyzer.linkedProjects": [],
+  "rust-analyzer.diagnostics.styleLints.enable": true
+}
