@@ -6,7 +6,7 @@ use std::env;
 mod db;
 mod gql;
 
-use gql::handler::graphql_server;
+use gql::graphql_server;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -32,6 +32,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(db.clone())
             .configure(graphql_server)
+            // .service(hello)
             .wrap(Cors::permissive())
             .wrap(Logger::default())
     })

@@ -1,10 +1,11 @@
-use sea_orm::{ConnectOptions, Database};
-use std::env;
-use std::time::Duration;
+use sea_orm::ConnectOptions;
+use sea_orm::{Database, DatabaseConnection, DbErr};
+use std::{env, time::Duration};
 
-pub type DBConnection = Result<sea_orm::DatabaseConnection, sea_orm::DbErr>;
+// pub type DBConnection = sea_orm::DatabaseConnection;
+pub type DBConnection = Result<DatabaseConnection, DbErr>;
 
-pub async fn connect_db() -> DBConnection {
+pub async fn connect_db() -> Result<DatabaseConnection, DbErr> {
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let mut opts = ConnectOptions::new(db_url.clone());
@@ -19,6 +20,13 @@ pub async fn connect_db() -> DBConnection {
         .sqlx_logging_level(log::LevelFilter::Info)
         .set_schema_search_path("db_schema");
 
-    // Pass opts directly without dereferencing
-    Database::connect(opts).await
+    // let _connection: sea_orm::DatabaseConnection = Database::connect(opts).await?;
+    // let conn = Database::connect(&db_url).await.unwrap();
+    // // //    conn
+    // // let _db = Database::connect(db_url).await?;
+    // // Ok(())
+    let conn = Database::connect(&db_url).await.unwrap();
+    // //    conn
+    // let _db = Database::connect(db_url).await?;
+    return Ok(conn);
 }
