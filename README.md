@@ -12,3 +12,11 @@ Run server with auto-reloading:
 cargo install systemfd cargo-watch
 systemfd --no-pid -s http::9000 -- cargo watch -x run
 ```
+
+References
+[Actix Docs]("")
+[Oliver](https://oliverjumpertz.com/blog/how-to-build-a-powerful-graphql-api-with-rust/)
+[Pyk](https://pyk.sh/rust-seaorm-insert-select-update-and-delete-rows-in-postgresql-tables?source=more_series_bottom_blogs)
+[Sea Docs](https://www.sea-ql.org/sea-orm-tutorial/ch01-03-migration-api.html)
+
+https://graphql.org/conf/2023/sessions/0b5f6bcbfc77f97f4cdc6cdf4a171f82/
