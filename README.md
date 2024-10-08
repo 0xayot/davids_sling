@@ -6,6 +6,24 @@ A small and simple trading bot.
 
 1. Visit [localhost:8000](http://localhost:8000) in browser
 
+Setup Migrations
+
+```
+sea migrate generate "migration name"
+```
+
+Run Migrations
+
+```
+sea migrate up
+```
+
+Generate Entities
+
+```
+sea generate entity -o entity/src --lib
+```
+
 Run server with auto-reloading:
 
 ```bash
