@@ -20,3 +20,6 @@ References
 [Sea Docs](https://www.sea-ql.org/sea-orm-tutorial/ch01-03-migration-api.html)
 
 https://graphql.org/conf/2023/sessions/0b5f6bcbfc77f97f4cdc6cdf4a171f82/
+https://yeet.io/posts/web-dev-with-rust/part-2/
+
+https://github.com/actix/examples/blob/master/background-jobs/src/ephemeral_jobs.rs

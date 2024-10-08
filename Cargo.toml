@@ -3,7 +3,12 @@ name = "davids_sling"
 version = "0.1.0"
 edition = "2021"
 
+members = [
+    "migration",
+]
+
 [dependencies]
+migration = { path = "../migration" }
 actix-web = "4.9.0"
 actix-cors = "0.7"
 dotenvy = "0.15.7"
