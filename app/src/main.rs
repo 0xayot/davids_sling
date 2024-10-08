@@ -1,3 +1,7 @@
+extern crate actix_cors;
+extern crate actix_web;
+extern crate dotenvy;
+
 use actix_cors::Cors;
 use actix_web::{get, middleware::Logger, App, HttpResponse, HttpServer, Responder};
 use dotenvy::dotenv;

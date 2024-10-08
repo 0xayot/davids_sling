@@ -1,21 +1,9 @@
-workspace = { members = ["entity"] }
-[package]
+[workspace] 
 name = "davids_sling"
-version = "0.1.0"
 edition = "2021"
 
 members = [
+    "app",
     "entity",
     "migration",
 ]
-
-[dependencies]
-migration = { path = "../migration" }
-actix-web = "4.9.0"
-actix-cors = "0.7"
-dotenvy = "0.15.7"
-env_logger = "0.10"        
-juniper = "0.16.1" 
-log = "0.4"
-sea-orm = { version = "1.0.0-rc.5", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }            
-serde = { version = "1.0", features = ["derive"] }
