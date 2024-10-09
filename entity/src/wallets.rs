@@ -9,6 +9,7 @@ pub struct Model {
   pub id: i32,
   pub title: String,
   pub chain: String,
+  #[sea_orm(unique)]
   pub address: String,
   pub encrypted_private_key: String,
   pub secret_key: String,

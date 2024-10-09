@@ -7,8 +7,11 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
   #[sea_orm(primary_key)]
   pub id: i32,
+  #[sea_orm(unique)]
   pub email: Option<String>,
-  pub tg_id: i32,
+  #[sea_orm(unique)]
+  pub tg_id: String,
+  pub tg_token: Option<String>,
   pub encrypted_password: String,
   pub created_at: DateTime,
   pub updated_at: DateTime,
