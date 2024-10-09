@@ -10,9 +10,13 @@ entity = { path = "../entity" }
 migration = { path = "../migration" }
 actix-web = "4.9.0"
 actix-cors = "0.7"
+bcrypt = "0.10"
+chrono = "0.4"
 dotenvy = "0.15.7"
-env_logger = "0.10"        
+env_logger = "0.10"
+jsonwebtoken = "9.3.0"        
 juniper = "0.16.1"
 log = "0.4"
 sea-orm = { version = "1.0.0-rc.5", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }            
 serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["v4"] }

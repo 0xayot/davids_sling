@@ -1,73 +1,66 @@
-use crate::db::DBConnection;
+use entity::users;
+use juniper::{EmptySubscription, FieldResult, RootNode};
+use sea_orm::{DatabaseConnection, EntityTrait};
 
-use juniper::{graphql_object, EmptySubscription, FieldResult, RootNode};
+use ::entity::prelude::*;
+
+pub struct Context {
+  pub db: DatabaseConnection,
+  pub user: Option<users::Model>,
+}
+impl juniper::Context for Context {}
 
 #[derive(GraphQLEnum)]
 enum Episode {
-    NewHope,
-    Empire,
-    Jedi,
+  NewHope,
+  Empire,
+  Jedi,
 }
 
-use juniper::{GraphQLEnum, GraphQLInputObject, GraphQLObject};
-pub struct Context {
-    pub db_connection: DBConnection,
-}
+use juniper::{GraphQLEnum, GraphQLInputObject};
 
-impl juniper::Context for Context {}
-
-#[derive(GraphQLObject)]
-#[graphql(description = "A humanoid creature in the Star Wars universe")]
-struct Human {
-    id: String,
-    name: String,
-    appears_in: Vec<Episode>,
-    home_planet: String,
-}
+use super::user::{UserMutation, UserQuery};
 
 #[derive(GraphQLInputObject)]
 #[graphql(description = "A humanoid creature in the Star Wars universe")]
 struct NewHuman {
-    name: String,
-    appears_in: Vec<Episode>,
-    home_planet: String,
+  name: String,
+  appears_in: Vec<Episode>,
+  home_planet: String,
 }
 
-pub struct QueryRoot;
+pub struct Query;
 
-#[graphql_object(Context = Context)]
-impl QueryRoot {
-    #[graphql(description = "Say hello")]
-    fn hello() -> FieldResult<String> {
-        Ok("Hello, world!".to_string())
-    }
+// #[juniper::graphql_object]
+#[juniper::graphql_object(Context = Context)]
+impl Query {
+  #[graphql(description = "Say hello")]
+  async fn hello(context: &Context) -> FieldResult<String> {
+    let db = &context.db;
 
-    fn human(_id: String) -> FieldResult<Human> {
-        Ok(Human {
-            id: "1234".to_owned(),
-            name: "Luke".to_owned(),
-            home_planet: "Mars".to_owned(),
-            appears_in: vec![Episode::NewHope],
-        })
-    }
+    let all = Users::find().all(db).await?;
+
+    println!("{:#?}", all);
+
+    Ok("Hello, world!".to_string())
+  }
+  fn user() -> UserQuery {
+    UserQuery
+  }
 }
 
-pub struct MutationRoot;
+pub struct Mutation;
 
-#[graphql_object(Context = Context)]
-impl MutationRoot {
-    fn create_human(new_human: NewHuman) -> FieldResult<Human> {
-        Ok(Human {
-            id: "1234".to_owned(),
-            name: new_human.name,
-            appears_in: new_human.appears_in,
-            home_planet: new_human.home_planet,
-        })
-    }
+// #[juniper::graphql_object]
+#[juniper::graphql_object(Context = Context)]
+impl Mutation {
+  fn user() -> UserMutation {
+    UserMutation
+  }
 }
 
-pub type Schema = RootNode<'static, QueryRoot, MutationRoot, EmptySubscription<Context>>;
+pub type Schema = RootNode<'static, Query, Mutation, EmptySubscription<Context>>;
 
 pub fn create_schema() -> Schema {
-    Schema::new(QueryRoot, MutationRoot, EmptySubscription::new())
+  Schema::new(Query {}, Mutation, EmptySubscription::new())
 }
