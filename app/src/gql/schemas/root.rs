@@ -1,8 +1,6 @@
 use entity::users;
 use juniper::{EmptySubscription, FieldResult, RootNode};
-use sea_orm::{DatabaseConnection, EntityTrait};
-
-use ::entity::prelude::*;
+use sea_orm::DatabaseConnection;
 
 pub struct Context {
   pub db: DatabaseConnection,
@@ -21,13 +19,7 @@ pub struct Query;
 #[juniper::graphql_object(Context = Context)]
 impl Query {
   #[graphql(description = "Say hello")]
-  async fn hello(context: &Context) -> FieldResult<String> {
-    let db = &context.db;
-
-    let all = Users::find().all(db).await?;
-
-    println!("{:#?}", all);
-
+  async fn hello() -> FieldResult<String> {
     Ok("Hello, world!".to_string())
   }
   fn user() -> UserQuery {
