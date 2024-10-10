@@ -12,8 +12,9 @@ impl MigrationTrait for Migration {
           .table(User::Table)
           .if_not_exists()
           .col(pk_auto(User::Id))
-          .col(ColumnDef::new(User::Email).string().null())
-          .col(ColumnDef::new(User::TgId).integer().not_null())
+          .col(ColumnDef::new(User::Email).string().null().unique_key())
+          .col(ColumnDef::new(User::TgId).string().not_null().unique_key())
+          .col(ColumnDef::new(User::TgToken).string().null())
           .col(ColumnDef::new(User::EncryptedPassword).string().not_null())
           .col(
             ColumnDef::new(User::CreatedAt)
@@ -46,6 +47,7 @@ pub enum User {
   Id,
   Email,
   TgId,
+  TgToken,
   EncryptedPassword,
   CreatedAt,
   UpdatedAt,

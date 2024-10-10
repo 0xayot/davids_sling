@@ -16,7 +16,12 @@ impl MigrationTrait for Migration {
           .col(pk_auto(Wallet::Id))
           .col(ColumnDef::new(Wallet::Title).string().not_null()) // Added not_null()
           .col(ColumnDef::new(Wallet::Chain).string().not_null())
-          .col(ColumnDef::new(Wallet::Address).string().not_null())
+          .col(
+            ColumnDef::new(Wallet::Address)
+              .string()
+              .not_null()
+              .unique_key(),
+          )
           .col(
             ColumnDef::new(Wallet::EncryptedPrivateKey)
               .string()
