@@ -10,24 +10,10 @@ pub struct Context {
 }
 impl juniper::Context for Context {}
 
-#[derive(GraphQLEnum)]
-enum Episode {
-  NewHope,
-  Empire,
-  Jedi,
-}
-
-use juniper::{GraphQLEnum, GraphQLInputObject};
-
-use super::user::{UserMutation, UserQuery};
-
-#[derive(GraphQLInputObject)]
-#[graphql(description = "A humanoid creature in the Star Wars universe")]
-struct NewHuman {
-  name: String,
-  appears_in: Vec<Episode>,
-  home_planet: String,
-}
+use super::{
+  user::{UserMutation, UserQuery},
+  wallet::{WalletMutation, WalletQuery},
+};
 
 pub struct Query;
 
@@ -47,6 +33,9 @@ impl Query {
   fn user() -> UserQuery {
     UserQuery
   }
+  fn wallet() -> WalletQuery {
+    WalletQuery
+  }
 }
 
 pub struct Mutation;
@@ -56,6 +45,9 @@ pub struct Mutation;
 impl Mutation {
   fn user() -> UserMutation {
     UserMutation
+  }
+  fn wallet() -> WalletMutation {
+    WalletMutation
   }
 }
 

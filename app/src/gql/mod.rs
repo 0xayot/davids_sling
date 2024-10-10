@@ -8,7 +8,6 @@ use schemas::root::{create_schema, Context, Schema};
 
 #[route("/graphql", method = "GET", method = "POST")]
 async fn graphql(
-  // _db: web::Data<DBConnection>,
   req: HttpRequest,
   st: web::Data<Schema>,
   data: web::Json<GraphQLRequest>,
@@ -18,7 +17,6 @@ async fn graphql(
     .expect("Failed to connect to the database");
 
   let user = req_user(req, &db).await;
-  println!("{:?}", user);
 
   let ctx = Context { db, user };
 

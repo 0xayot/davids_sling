@@ -19,7 +19,7 @@ pub async fn connect_db() -> DBConnection {
     .max_lifetime(Duration::from_secs(8))
     .sqlx_logging(true)
     .sqlx_logging_level(log::LevelFilter::Info)
-    .set_schema_search_path("db_schema");
+    .set_schema_search_path("db_schema".to_owned());
 
   // let _connection: sea_orm::DatabaseConnection = Database::connect(opts).await?;
   // let conn = Database::connect(&db_url).await.unwrap();

@@ -16,7 +16,7 @@ use ::entity::prelude::*;
 pub struct Claims {
   pub sub: i32, // User ID
   pub tg_token: String,
-  pub exp: usize, // Expiration time
+  pub exp: usize,
 }
 
 #[derive(Debug)]
@@ -54,18 +54,18 @@ pub fn generate_jwt(user: &users::Model) -> Result<String, JwtError> {
     .duration_since(UNIX_EPOCH)
     .unwrap()
     .as_secs()
-    + 7 * 24 * 60 * 60; // Use usize for duration
+    + 7 * 24 * 60 * 60;
 
   let claims = Claims {
     sub: user.id,
     tg_token,
-    exp: expiration as usize, // Ensure expiration is of the correct type
+    exp: expiration as usize,
   };
 
   encode(
     &Header::default(),
     &claims,
-    &EncodingKey::from_secret(secret.as_bytes()), // Convert secret to &[u8]
+    &EncodingKey::from_secret(secret.as_bytes()),
   )
   .map_err(JwtError::Encoding)
 }

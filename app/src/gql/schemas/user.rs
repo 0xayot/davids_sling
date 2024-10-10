@@ -1,4 +1,4 @@
-use super::root::Context;
+use super::{root::Context, wallet::Wallet};
 use crate::utils::{
   auth::generate_jwt,
   encryption::{self, verify_password},
@@ -38,22 +38,37 @@ impl User {
   }
 
   fn created_at(&self) -> String {
-    self.created_at.to_string() // Convert to String
+    self.created_at.to_string()
   }
 
   fn updated_at(&self) -> String {
-    self.updated_at.to_string() // Convert to String
+    self.updated_at.to_string()
   }
 
-  // async fn wallets(&self, context: &Context) -> Vec<Wallet> {
-  //   let mut db = &context.db;
-  //   let wallets = Users::find()
-  //     .filter(wallets::Column::UserId.eq(*&self.id))
-  //     .all(&mut db)
-  //     .await
-  //     .unwrap_or_default();
-  //   wallets
-  // }
+  async fn wallets(&self, context: &Context) -> Vec<Wallet> {
+    let db = &context.db;
+
+    // Query to find users and their associated wallets
+    let user_wallets = wallets::Entity::find()
+      .filter(wallets::Column::UserId.eq(self.id))
+      .all(db)
+      .await
+      .unwrap_or_default();
+    let wallets: Vec<Wallet> = user_wallets
+      .into_iter()
+      .map(|w| Wallet {
+        id: w.id,
+        title: w.title,
+        chain: w.chain,
+        address: w.address,
+        user_id: w.user_id,
+        created_at: w.created_at.to_string(),
+        updated_at: w.updated_at.to_string(),
+      })
+      .collect();
+
+    wallets
+  }
 }
 
 #[derive(GraphQLInputObject)]
@@ -121,18 +136,15 @@ pub struct UserMutation;
 #[graphql_object(context = Context)]
 impl UserMutation {
   async fn add_user(context: &Context, input: NewUserInput) -> Result<User, String> {
-    // Check if the password is empty and handle the error
     if input.password.is_empty() {
       return Err("Password cannot be empty".to_string());
     }
 
-    // Hash the password and handle potential errors
     let hashed_password = match encryption::hash_password(&input.password) {
       Ok(hash) => hash,
       Err(e) => return Err(format!("Error hashing password: {}", e)),
     };
 
-    // Create the new user model
     let user = users::ActiveModel {
       email: Set(Some(input.email.clone())),
       tg_id: Set(input.tg_id),
@@ -141,7 +153,6 @@ impl UserMutation {
       ..Default::default()
     };
 
-    // Attempt to insert the user into the database
     let result = Users::insert(user)
       .exec(&context.db)
       .await
@@ -167,7 +178,6 @@ impl UserMutation {
       .map_err(|e| e.to_string())?
       .ok_or("User not found".to_string())?;
 
-    // Check if the provided password matches the hashed password
     if verify_password(&input.password, &user.encrypted_password).is_err() {
       return Err("Invalid password".to_string());
     }
