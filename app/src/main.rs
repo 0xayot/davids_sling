@@ -1,8 +1,11 @@
 use actix_cors::Cors;
 use actix_web::{get, middleware::Logger, App, HttpResponse, HttpServer, Responder};
+use bot::{answer, Command};
 use dotenvy::dotenv;
 use std::env;
+use teloxide::{prelude::*, utils::command::BotCommands};
 
+mod bot;
 mod db;
 mod gql;
 mod utils;
@@ -22,12 +25,23 @@ async fn hello() -> impl Responder {
 async fn main() -> std::io::Result<()> {
   dotenv().ok(); // Load environment variables from .env file
 
+  pretty_env_logger::init();
+  log::info!("Starting command bot...");
+
   let db = db::connect_db()
     .await
     .expect("Failed to connect to the database");
 
+  let bot = Bot::from_env();
+  bot
+    .set_my_commands(Command::bot_commands())
+    .await
+    .expect("Failed to set bot commands");
+
   log::info!("starting HTTP server on port 8080");
   log::info!("GraphiQL playground: http://localhost:8080/graphiql");
+
+  Command::repl(bot, answer).await;
 
   HttpServer::new(move || {
     App::new()
