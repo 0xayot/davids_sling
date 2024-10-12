@@ -29,6 +29,7 @@ rand = "0.8"
 reqwest = { version = "0.11", features = ["json"] }
 sea-orm = { version = "0.11.3", features = [ "sqlx-postgres", "runtime-tokio-native-tls", "macros" ] }            
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 sha2 = "0.9.8"
 solana-account-decoder = "1.14"
 solana-client = "1.14"
@@ -36,4 +37,5 @@ solana-sdk = "=1.18.25"
 spl-token = "3.5"
 sqlx = "=0.6.3"
 teloxide = { version = "0.13", features = ["macros"] }
+tokio = "1.40.0"
 uuid = { version = "1.0", features = ["v4"] }

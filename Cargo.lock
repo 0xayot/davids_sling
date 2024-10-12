@@ -427,6 +427,7 @@ dependencies = [
  "reqwest",
  "sea-orm 0.11.3",
  "serde",
+ "serde_json",
  "sha2 0.9.9",
  "solana-account-decoder",
  "solana-client",
@@ -434,6 +435,7 @@ dependencies = [
  "spl-token 3.5.0",
  "sqlx 0.6.3",
  "teloxide",
+ "tokio",
  "uuid",
 ]
 
