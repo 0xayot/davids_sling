@@ -1,13 +1,17 @@
-#[macro_use]
-extern crate lazy_static;
-
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
-#[derive(Clone)]
-struct CacheEntry {
-  value: String,
+#[derive(Clone, Debug)]
+pub enum CacheValue {
+  StringValue(String),
+  HashMapValue(HashMap<String, f64>),
+}
+
+#[derive(Clone, Debug)]
+pub struct CacheEntry {
+  value: CacheValue,
   expiry: Option<Instant>, // Optional expiry time
 }
 
@@ -18,7 +22,7 @@ lazy_static! {
 }
 
 // Function to get a value from the cache
-pub fn get_memory_value(key: &str) -> Option<String> {
+pub fn get_memcache_value(key: &str) -> Option<CacheValue> {
   let cache = CACHE.read().unwrap();
 
   if let Some(entry) = cache.get(key) {
@@ -27,7 +31,7 @@ pub fn get_memory_value(key: &str) -> Option<String> {
       if Instant::now() < expiry {
         return Some(entry.value.clone());
       } else {
-        // Optionally remove expired entries
+        // Remove expired entries
         drop(cache); // Release read lock before modifying
         let mut cache = CACHE.write().unwrap();
         cache.remove(key);
@@ -40,10 +44,48 @@ pub fn get_memory_value(key: &str) -> Option<String> {
   None
 }
 
-// Function to set a value in the cache
-pub fn set_memory_value(key: String, value: String, expiry_seconds: Option<u64>) {
+// Function to retrieve a string value from the cache
+pub fn get_memcache_string(key: &str) -> Option<String> {
+  if let Some(value) = get_memcache_value(key) {
+    if let CacheValue::StringValue(s) = value {
+      return Some(s);
+    }
+  }
+  None
+}
+
+pub fn get_memcache_hash(key: &str) -> Option<HashMap<String, f64>> {
+  if let Some(value) = get_memcache_value(key) {
+    if let CacheValue::HashMapValue(h) = value {
+      return Some(h);
+    }
+  }
+  None
+}
+// Function to set a string value in the cache
+pub fn set_memcache_string(key: String, value: String, expiry_seconds: Option<u64>) {
   let expiry = expiry_seconds.map(|seconds| Instant::now() + Duration::from_secs(seconds));
 
   let mut cache = CACHE.write().unwrap();
-  cache.insert(key, CacheEntry { value, expiry });
+  cache.insert(
+    key,
+    CacheEntry {
+      value: CacheValue::StringValue(value),
+      expiry,
+    },
+  );
+}
+
+// Function to set a HashMap value in the cache
+pub fn set_memcache_hashmap(key: String, value: HashMap<String, f64>, expiry_seconds: Option<u64>) {
+  let expiry = expiry_seconds.map(|seconds| Instant::now() + Duration::from_secs(seconds));
+
+  let mut cache = CACHE.write().unwrap();
+  cache.insert(
+    key,
+    CacheEntry {
+      value: CacheValue::HashMapValue(value),
+      expiry,
+    },
+  );
 }
