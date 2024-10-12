@@ -2,6 +2,8 @@
 
 A small and simple trading bot.
 
+Go to t.me/DavidsSlingBot to begin.
+
 1. Execute `cargo run` to start the server
 
 1. Visit [localhost:8000](http://localhost:8000) in browser
@@ -39,3 +41,7 @@ References
 - [Sea Docs](https://www.sea-ql.org/sea-orm-tutorial/ch01-03-migration-api.html)
 
 - [Actix Examples](https://github.com/actix/examples/blob/master/background-jobs/src/ephemeral_jobs.rs)
+
+- [Joshmo](https://joshmo.hashnode.dev/building-deploying-a-down-detector-telegram-bot-in-rust)
+
+https://github.com/galeone/raf
