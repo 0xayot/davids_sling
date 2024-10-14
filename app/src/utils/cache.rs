@@ -1,4 +1,5 @@
 // https://users.rust-lang.org/t/solved-what-pattern-would-you-suggest-for-caching-since-theres-no-concept-of-global-heap-variables-in-rust/26086/2
+
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::RwLock;
