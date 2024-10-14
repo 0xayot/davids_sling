@@ -33,8 +33,6 @@ pub async fn fetch_token_price(ticker: &str) -> Result<f64> {
 }
 
 pub async fn fetch_token_sol_price(ticker: &str) -> Result<f64> {
-  // let sol_price
-  // let token_price
   match get_memcache_hash("raydium_price") {
     Some(map) => {
       if let Some(&price) = map.get(ticker) {

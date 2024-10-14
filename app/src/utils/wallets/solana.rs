@@ -11,6 +11,8 @@ use solana_sdk::pubkey::Pubkey;
 use spl_token::state::{Account as TokenAccount, Mint};
 use std::{env, str::FromStr};
 
+use solana_client::nonblocking::rpc_client::RpcClient as AsyncClient;
+
 use crate::utils::encryption::encrypt_private_key;
 
 #[derive(Debug)]
@@ -64,50 +66,52 @@ pub fn recover_wallet_from_private_key(private_key: &str) -> Option<SolanaKeyPai
 }
 
 #[derive(Debug)]
-struct TokenInfo {
+pub struct TokenInfo {
   mint_address: String,
   token_balance: f64,
   decimals: u8,
 }
 
-pub fn get_spl_tokens_in_wallet(
+pub async fn get_spl_tokens_in_wallet(
   address: &str,
 ) -> Result<Vec<TokenInfo>, Box<dyn std::error::Error>> {
   // Connect to Solana network
   let rpc_url = env::var("SOLANA_RPC_URL")?;
-  let client = RpcClient::new(rpc_url);
+  let client = AsyncClient::new(rpc_url);
 
   // Create a Pubkey from the address string
   let pubkey = Pubkey::from_str(address)?;
 
   // Fetch all token accounts owned by this address
-  let token_accounts =
-    client.get_token_accounts_by_owner(&pubkey, TokenAccountsFilter::ProgramId(spl_token::id()))?;
+  let token_accounts = client
+    .get_token_accounts_by_owner(&pubkey, TokenAccountsFilter::ProgramId(spl_token::id()))
+    .await?;
 
   // Process and return the token information
   let mut tokens = Vec::new();
   for account in token_accounts {
-    // Handle UiAccountData
-    if let UiAccountData::Binary(data, _) = account.account.data {
-      // Decode the base64-encoded string to raw bytes
-      let decoded_data = decode(data)?;
+    // Extract the mint address, amount, and decimals from the account data
+    if let UiAccountData::Json(parsed_account) = account.account.data {
+      // Access the parsed token account info
+      let info = &parsed_account.parsed["info"];
 
-      // Unpack the token account
-      let token_account: TokenAccount = TokenAccount::unpack(&decoded_data)?;
+      let mint = info["mint"].as_str().unwrap_or_default().to_string();
+      let amount_str = info["tokenAmount"]["amount"].as_str().unwrap_or("0");
+      let decimals = info["tokenAmount"]["decimals"].as_u64().unwrap_or(0) as u8;
 
-      // Fetch the mint account data
-      let mint_account = client.get_account(&token_account.mint)?;
-      let mint: Mint = Mint::unpack(&mint_account.data)?;
+      let token_amount = amount_str.parse::<f64>().unwrap_or(0.0) / 10f64.powi(decimals as i32);
 
-      let token_amount = token_account.amount as f64 / 10f64.powi(mint.decimals as i32);
-
-      tokens.push(TokenInfo {
-        mint_address: token_account.mint.to_string(),
-        token_balance: token_amount,
-        decimals: mint.decimals,
-      });
+      if token_amount > 0.0 {
+        tokens.push(TokenInfo {
+          mint_address: mint,
+          token_balance: token_amount,
+          decimals,
+        });
+      }
     }
   }
+
+  
 
   Ok(tokens)
 }
@@ -118,3 +122,6 @@ pub fn get_wallet_sol_balance(address: &str) -> f64 {
   let connection = RpcClient::new(rpc_url.unwrap());
   return connection.get_balance(&owner_pubkey).unwrap() as f64;
 }
+
+
+pub fn register_wallet_tokens
