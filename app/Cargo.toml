@@ -10,8 +10,10 @@ entity = { path = "../entity" }
 migration = { path = "../migration" }
 actix-web = "4.9.0"
 actix-cors = "0.7"
+actix-rt = "2.2.0"
 aes = "0.7"
 anyhow = "1.0"
+background-jobs = "0.15.0"
 base64 = "0.13"
 bcrypt = "0.10"
 block-modes = "0.8"  
@@ -35,7 +37,8 @@ solana-account-decoder = "1.14"
 solana-client = "1.14"
 solana-sdk = "=1.18.25"
 spl-token = "3.5"
-sqlx = "=0.6.3"
+sqlx = { version = "0.6.3", features = ["runtime-tokio-native-tls"] }
 teloxide = { version = "0.13", features = ["macros"] }
-tokio = "1.40.0"
+tokio = {version = "1.40.0", features =  ["full"] }
+tokio_schedule = "0.3.0"
 uuid = { version = "1.0", features = ["v4"] }
