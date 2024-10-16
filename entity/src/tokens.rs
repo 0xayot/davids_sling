@@ -3,19 +3,15 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "wallets")]
+#[sea_orm(table_name = "tokens")]
 pub struct Model {
   #[sea_orm(primary_key)]
   pub id: i32,
-  pub title: String,
-  pub chain: String,
   #[sea_orm(unique)]
-  pub address: String,
-  pub encrypted_private_key: String,
-  pub secret_key: String,
-  pub salt: String,
-  pub encryption_schema: String,
-  pub user_id: i32,
+  pub contract_address: String,
+  pub chain: String,
+  pub name: Option<String>,
+  pub metadata: Option<Json>,
   pub created_at: DateTime,
   pub updated_at: DateTime,
 }
@@ -24,25 +20,11 @@ pub struct Model {
 pub enum Relation {
   #[sea_orm(has_many = "super::trade_orders::Entity")]
   TradeOrders,
-  #[sea_orm(
-    belongs_to = "super::users::Entity",
-    from = "Column::UserId",
-    to = "super::users::Column::Id",
-    on_update = "NoAction",
-    on_delete = "NoAction"
-  )]
-  Users,
 }
 
 impl Related<super::trade_orders::Entity> for Entity {
   fn to() -> RelationDef {
     Relation::TradeOrders.def()
-  }
-}
-
-impl Related<super::users::Entity> for Entity {
-  fn to() -> RelationDef {
-    Relation::Users.def()
   }
 }
 
