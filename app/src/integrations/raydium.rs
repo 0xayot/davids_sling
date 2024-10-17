@@ -40,6 +40,18 @@ impl RaydiumPriceFetcher {
     Ok(price_map)
   }
 
+  pub async fn get_swap_quote(input_mint: &str, output_mint: &str, amount: &str, slippage: &str) {
+    let url_base = match env::var("DATABASE_URL") {
+      Ok(db_url) => println!("DATABASE_URL: {}", db_url),
+      Err(e) => eprintln!("Could not read DATABASE_URL: {}", e),
+    };
+
+    let url = format!(
+      "{}/compute/swap-base-in?inputMint={}&outputMint={}&amount={}&slippageBps={}&txVersion=V0",
+      input_mint, output_mint, amount, slippage
+    );
+  }
+
   fn parse_price_response(&self, json: Value) -> Result<HashMap<String, f64>> {
     let mut price_map: HashMap<String, f64> = HashMap::new();
 
