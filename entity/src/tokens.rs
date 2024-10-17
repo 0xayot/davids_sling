@@ -10,6 +10,7 @@ pub struct Model {
   #[sea_orm(unique)]
   pub contract_address: String,
   pub chain: String,
+  pub decimals: Option<i32>,
   pub name: Option<String>,
   pub metadata: Option<Json>,
   pub created_at: DateTime,
