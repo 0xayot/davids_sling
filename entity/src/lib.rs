@@ -2,5 +2,8 @@
 
 pub mod prelude;
 
+pub mod token_prices;
+pub mod tokens;
+pub mod trade_orders;
 pub mod users;
 pub mod wallets;

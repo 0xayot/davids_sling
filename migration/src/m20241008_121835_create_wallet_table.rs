@@ -29,7 +29,7 @@ impl MigrationTrait for Migration {
           )
           .col(ColumnDef::new(Wallet::SecretKey).string().not_null())
           .col(ColumnDef::new(Wallet::Salt).string().not_null())
-          .col(ColumnDef::new(Wallet::EncryptionSchema).string().not_null()) // Corrected spelling
+          .col(ColumnDef::new(Wallet::EncryptionSchema).string().not_null())
           .col(ColumnDef::new(Wallet::UserId).integer().not_null())
           .col(
             ColumnDef::new(Wallet::CreatedAt)

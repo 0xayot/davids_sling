@@ -1,6 +1,8 @@
 use crate::{
   gql::schemas::{root::Context, user::User},
-  utils::wallets::solana::{generate_wallet, recover_wallet_from_private_key},
+  utils::wallets::solana::{
+    generate_wallet, recover_wallet_from_private_key, register_wallet_tokens,
+  },
 };
 use ::entity::{prelude::*, *};
 use juniper::{graphql_object, GraphQLEnum, GraphQLInputObject};
@@ -212,6 +214,15 @@ impl WalletMutation {
       .map_err(|e| e.to_string())?
       .ok_or("Failed to retrieve wallet after insertion")?;
 
+    // Clone the address to ensure it lives long enough
+    let address = record.address.clone();
+    let user_id = wallet_user.id.clone();
+
+    tokio::spawn(async move {
+      let _ = register_wallet_tokens(&address, user_id).await;
+    });
+
+    // Return the Wallet struct using the original record
     Ok(Wallet {
       id: record.id,
       title: record.title,
