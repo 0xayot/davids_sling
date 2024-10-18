@@ -419,6 +419,7 @@ dependencies = [
  "background-jobs",
  "base64 0.13.1",
  "bcrypt",
+ "bincode",
  "block-modes",
  "chrono",
  "curve25519-dalek 4.1.3",

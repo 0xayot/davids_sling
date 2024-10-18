@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 #![allow(non_snake_case)]
+use base64::decode;
 use std::{collections::HashMap, env};
 
 use anyhow::{Context, Result};
+use bincode::deserialize;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use solana_sdk::transaction::VersionedTransaction;
 
 use crate::utils::cache::{
   get_memcache_string_hash, set_memcache_hashmap, set_memcache_string_hashmap,
@@ -92,6 +95,19 @@ struct SwapRequest {
   unwrapSol: bool,
   inputAccount: Option<String>,
   outputAccount: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SwapResponse {
+  data: Vec<TransactionData>,
+  id: String,
+  success: bool,
+  version: String,
+}
+
+#[derive(Deserialize)]
+struct TransactionData {
+  transaction: String,
 }
 
 impl RaydiumPriceFetcher {
@@ -216,7 +232,7 @@ impl RaydiumPriceFetcher {
     input_mint: &str,
     output_mint: &str,
     tokenPk: &str,
-  ) -> Result<String> {
+  ) -> Result<VersionedTransaction> {
     let url_base = env::var("RAYDIUM_SWAP_URL")
       .unwrap_or_else(|_| "https://transaction-v1.raydium.io".to_string());
 
@@ -244,19 +260,25 @@ impl RaydiumPriceFetcher {
       request_body.outputAccount = Some(tokenPk.to_string());
     };
 
-    println!("pre swap, {:?} \n", request_body);
-
     let response = self.client.post(url).json(&request_body).send().await?;
 
     // Ensure the response is successful
     response.error_for_status_ref()?;
 
-    // Parse the JSON response
-    let swap_response: Value = response.json().await?;
+    let swap_response: SwapResponse = response.json().await?;
+    let all_tx_buf: Vec<Vec<u8>> = swap_response
+      .data
+      .iter()
+      .map(|tx| decode(&tx.transaction))
+      .collect::<std::result::Result<Vec<_>, _>>()
+      .context("Failed to decode base64 transaction data")?;
 
-    let tx = swap_response["data"][0]["transaction"].to_string();
+    let versioned_tx: VersionedTransaction =
+      deserialize(&all_tx_buf[0]).context("Failed to deserialize VersionedTransaction")?;
 
-    Ok(tx)
+    println!("Deserialized transaction: {:?}", versioned_tx);
+
+    Ok(versioned_tx)
   }
 
   fn parse_price_response(&self, json: Value) -> Result<HashMap<String, f64>> {
