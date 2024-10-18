@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 pub enum CacheValue {
   StringValue(String),
   HashMapValue(HashMap<String, f64>),
+  StringHashMapValue(HashMap<String, String>),
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +64,16 @@ pub fn get_memcache_hash(key: &str) -> Option<HashMap<String, f64>> {
   }
   None
 }
+
+pub fn get_memcache_string_hash(key: &str) -> Option<HashMap<String, String>> {
+  if let Some(value) = get_memcache_value(key) {
+    if let CacheValue::StringHashMapValue(h) = value {
+      return Some(h);
+    }
+  }
+  None
+}
+
 // Function to set a string value in the cache
 pub fn set_memcache_string(key: String, value: String, expiry_seconds: Option<u64>) {
   let expiry = expiry_seconds.map(|seconds| Instant::now() + Duration::from_secs(seconds));
@@ -86,6 +97,23 @@ pub fn set_memcache_hashmap(key: String, value: HashMap<String, f64>, expiry_sec
     key,
     CacheEntry {
       value: CacheValue::HashMapValue(value),
+      expiry,
+    },
+  );
+}
+
+pub fn set_memcache_string_hashmap(
+  key: String,
+  value: HashMap<String, String>,
+  expiry_seconds: Option<u64>,
+) {
+  let expiry = expiry_seconds.map(|seconds| Instant::now() + Duration::from_secs(seconds));
+
+  let mut cache = CACHE.write().unwrap();
+  cache.insert(
+    key,
+    CacheEntry {
+      value: CacheValue::StringHashMapValue(value),
       expiry,
     },
   );

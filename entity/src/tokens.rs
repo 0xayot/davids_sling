@@ -9,6 +9,8 @@ pub struct Model {
   pub id: i32,
   #[sea_orm(unique)]
   pub contract_address: String,
+  #[sea_orm(unique)]
+  pub token_public_key: Option<String>,
   pub chain: String,
   pub decimals: Option<i32>,
   pub name: Option<String>,

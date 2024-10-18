@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use ::entity::prelude::*;
 use entity::{tokens, trade_orders, wallets};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
@@ -74,6 +75,7 @@ pub struct TokenInfo {
   mint_address: String,
   token_balance: f64,
   decimals: u8,
+  mint_public_key: String,
 }
 
 #[derive(Debug)]
@@ -83,6 +85,7 @@ pub struct SlingTokenInfo {
   pub token_balance: f64,
   pub price: f64,
   pub decimals: u8,
+  pub public_key: String,
 }
 
 pub async fn get_spl_tokens_in_wallet(
@@ -122,6 +125,7 @@ pub async fn get_spl_tokens_in_wallet(
           mint_address: mint,
           token_balance: token_amount,
           decimals,
+          mint_public_key: account.pubkey,
         });
       }
     }
@@ -166,6 +170,7 @@ pub async fn register_wallet_tokens(
             price: token_usd_price,
             token_balance: token.token_balance,
             decimals: token.decimals,
+            public_key: token.mint_public_key,
           });
         }
       }
@@ -221,6 +226,7 @@ pub async fn register_wallet_tokens(
       } else {
         let new_token = tokens::ActiveModel {
           contract_address: Set(token.mint_address.clone()),
+          token_public_key: Set(Some(token.public_key)),
           chain: Set("solana".to_string()),
           decimals: Set(Some(token.decimals as i32)),
           name: Set(None),

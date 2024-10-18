@@ -18,6 +18,7 @@ impl MigrationTrait for Migration {
               .not_null()
               .unique_key(),
           )
+          .col(ColumnDef::new(Token::TokenPublicKey).string().unique_key())
           .col(ColumnDef::new(Token::Chain).string().not_null())
           .col(ColumnDef::new(Token::Decimals).integer())
           .col(ColumnDef::new(Token::Name).string())
@@ -54,6 +55,7 @@ pub enum Token {
   Table,
   Id,
   ContractAddress,
+  TokenPublicKey,
   Chain,
   Decimals,
   Name,
