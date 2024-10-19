@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use ::entity::prelude::*;
+use anyhow::{Context, Result};
 use entity::{tokens, trade_orders, wallets};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 use solana_account_decoder::UiAccountData;
@@ -68,6 +69,21 @@ pub fn recover_wallet_from_private_key(private_key: &str) -> Option<SolanaKeyPai
   };
 
   Some(res)
+}
+
+// TODO: Refactor this for use in the recover_wallet
+pub fn keypair_from_private_key(private_key: &str) -> Result<Keypair> {
+  let bytes = bs58::decode(private_key)
+    .into_vec()
+    .context("Failed to decode base58 private key")?;
+
+  if bytes.len() != 64 {
+    return Err(anyhow::anyhow!("Invalid private key length"));
+  }
+
+  let keypair = Keypair::from_bytes(&bytes).context("Failed to create keypair from bytes")?;
+
+  Ok(keypair)
 }
 
 #[derive(Debug)]
