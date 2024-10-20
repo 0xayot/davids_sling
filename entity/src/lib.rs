@@ -2,6 +2,7 @@
 
 pub mod prelude;
 
+pub mod onchain_transaction;
 pub mod token_prices;
 pub mod tokens;
 pub mod trade_orders;
