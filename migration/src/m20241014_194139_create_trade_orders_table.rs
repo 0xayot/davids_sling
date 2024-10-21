@@ -43,6 +43,12 @@ impl MigrationTrait for Migration {
               .not_null(),
           )
           .col(ColumnDef::new(TradeOrder::Strategy).string().not_null())
+          .col(
+            ColumnDef::new(TradeOrder::Active)
+              .boolean()
+              .not_null()
+              .default(true),
+          )
           .col(ColumnDef::new(TradeOrder::CreatedBy).string().not_null())
           .col(ColumnDef::new(TradeOrder::Metadata).json())
           .col(
@@ -102,6 +108,7 @@ pub enum TradeOrder {
   TargetPercentage,
   ContractAddress,
   Strategy,
+  Active,
   CreatedBy,
   Metadata,
   CreatedAt,
