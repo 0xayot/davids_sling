@@ -281,3 +281,53 @@ pub async fn register_wallet_tokens(
 
   Ok(())
 }
+
+pub struct SplTokenBalance {
+  pub amount: f64,
+  pub ui_amount: f64,
+}
+
+async fn get_token_balance(
+  wallet_address: &str,
+  mint_address: &str,
+) -> Result<SplTokenBalance, Box<dyn std::error::Error + Send>> {
+  let rpc_url =
+    env::var("SOLANA_RPC_URL").map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+  let client = AsyncClient::new(rpc_url);
+
+  let wallet_pubkey = Pubkey::from_str(wallet_address)
+    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+
+  let token_accounts = client
+    .get_token_accounts_by_owner(
+      &wallet_pubkey,
+      TokenAccountsFilter::ProgramId(spl_token::id()),
+    )
+    .await
+    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+
+  for account in token_accounts {
+    // Extract the mint address, amount, and decimals from the account data
+    if let UiAccountData::Json(parsed_account) = account.account.data {
+      // Access the parsed token account info
+      let info = &parsed_account.parsed["info"];
+
+      let mint = info["mint"].as_str().unwrap_or_default().to_string();
+
+      if (mint == mint_address.to_string()) {
+        let amount_str = info["tokenAmount"]["amount"].as_str().unwrap_or("0");
+        let amount = amount_str.parse::<f64>().unwrap_or(0.0);
+        let decimals = info["tokenAmount"]["decimals"].as_u64().unwrap_or(0) as u8;
+
+        let ui_amount = amount / 10f64.powi(decimals as i32);
+        return Ok(SplTokenBalance { amount, ui_amount });
+      }
+    }
+  }
+
+  // If no matching token account is found, return a balance of 0
+  Ok(SplTokenBalance {
+    amount: 0.0,
+    ui_amount: 0.0,
+  })
+}
