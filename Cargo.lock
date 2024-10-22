@@ -426,6 +426,7 @@ dependencies = [
  "dotenvy",
  "entity",
  "env_logger 0.10.2",
+ "futures",
  "hex",
  "jsonwebtoken",
  "juniper",

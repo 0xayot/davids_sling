@@ -18,7 +18,7 @@ pub async fn start_cron() {
     }
   });
 
-  let update_spl_tokens_in_wallet = every(3).minutes()..in_timezone(&Utc).perform(|| async {
+  let update_spl_tokens_in_wallet = every(3).minutes().in_timezone(&Utc).perform(|| async {
     println!(
       " running update_spl_tokens_in_wallet job - {:?}",
       Local::now()
@@ -30,5 +30,6 @@ pub async fn start_cron() {
 
   tokio::spawn(every_second);
   tokio::spawn(sol_price_update);
+  tokio::spawn(update_spl_tokens_in_wallet);
   // sol_price_update.await;
 }
