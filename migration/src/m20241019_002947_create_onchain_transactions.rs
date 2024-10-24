@@ -91,8 +91,9 @@ impl MigrationTrait for Migration {
   }
 }
 
-#[derive(Iden)]
+#[derive(DeriveIden)]
 pub enum OnchainTransaction {
+  #[sea_orm(iden = "onchain_transactions")]
   Table,
   Id,
   UserId,
