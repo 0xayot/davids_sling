@@ -1,4 +1,5 @@
 use aes::Aes128;
+use anyhow::{Context, Result};
 use bcrypt::{hash, verify, BcryptError, DEFAULT_COST};
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
@@ -62,16 +63,16 @@ pub fn encrypt_private_key(
   Ok(res)
 }
 
-// Corresponding decryption function
-pub fn decrypt_private_key(
-  details: &EncryptPKDetails,
-) -> Result<String, Box<dyn std::error::Error>> {
-  let salt = hex::decode(&details.salt)?;
-  let key = hex::decode(&details.secret_key)?;
-  let ciphertext = hex::decode(&details.encrypted_private_key)?;
+pub fn decrypt_private_key(details: &EncryptPKDetails) -> Result<String> {
+  let salt = hex::decode(&details.salt).context("Failed to decode salt")?;
+  let key = hex::decode(&details.secret_key).context("Failed to decode secret key")?;
+  let ciphertext = hex::decode(&details.encrypted_private_key)
+    .context("Failed to decode encrypted private key")?;
 
-  let cipher = Aes128Cbc::new_from_slices(&key, &salt)?;
-  let decrypted_bytes = cipher.decrypt_vec(&ciphertext)?;
+  let cipher = Aes128Cbc::new_from_slices(&key, &salt).context("Failed to create cipher")?;
+  let decrypted_bytes = cipher
+    .decrypt_vec(&ciphertext)
+    .context("Failed to decrypt private key")?;
 
-  String::from_utf8(decrypted_bytes).map_err(|e| e.into())
+  String::from_utf8(decrypted_bytes).context("Failed to convert decrypted bytes to UTF-8 string")
 }
