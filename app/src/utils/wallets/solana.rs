@@ -287,7 +287,7 @@ pub struct SplTokenBalance {
   pub ui_amount: f64,
 }
 
-async fn get_token_balance(
+pub(crate) async fn get_token_balance(
   wallet_address: &str,
   mint_address: &str,
 ) -> Result<SplTokenBalance, Box<dyn std::error::Error + Send>> {

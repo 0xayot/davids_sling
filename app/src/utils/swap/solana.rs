@@ -1,113 +1,185 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use entity::{users, wallets};
+use sea_orm::{DatabaseConnection, EntityTrait};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
   commitment_config::CommitmentConfig,
-  pubkey::Pubkey,
-  signature::{Keypair, Signer},
-  transaction::VersionedTransaction,
+  signature::{Keypair, Signature},
+  transaction::{Transaction, VersionedTransaction},
 };
 use std::env;
-use std::str::FromStr;
+use std::time::Duration;
 
+use crate::utils::{
+  encryption::{decrypt_private_key, EncryptPKDetails},
+  wallets::solana::keypair_from_private_key,
+};
+
+const MAX_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 1000;
+
+/// Execute a Raydium swap transaction
 pub async fn execute_raydium_swap_tx(
   unsigned_tx: VersionedTransaction,
   keypair: &Keypair,
-) -> Result<String> {
+) -> Result<Signature> {
   let rpc_url =
     env::var("SOLANA_RPC_URL").context("Failed to retrieve SOLANA_RPC_URL from environment")?;
+  let client = RpcClient::new_with_timeout(rpc_url, Duration::from_secs(30));
 
-  // Create an RPC client
-  let client = RpcClient::new(rpc_url);
+  let recent_blockhash = client.get_latest_blockhash()?;
 
-  // Sign the transaction
-  let mut signed_tx = unsigned_tx;
-  signed_tx.sign(&[keypair], signed_tx.message.recent_blockhash);
+  // Convert VersionedMessage to Message
+  let message = match unsigned_tx.message {
+    solana_sdk::message::VersionedMessage::Legacy(message) => message,
+    _ => return Err(anyhow!("Unsupported message version")),
+  };
 
-  // Send the transaction
-  let signature = client
-    .send_transaction(&signed_tx)
-    .context("Failed to send transaction")?;
+  // Create a new Transaction from the Message
+  let mut tx = Transaction::new_unsigned(message);
 
-  println!("Transaction sent with signature: {}", signature);
-  Ok(signature.to_string())
+  // Sign the transaction with the recent blockhash
+
+  tx.sign(&[keypair], recent_blockhash.to_owned());
+
+  // Attempt to send transaction with retries
+  let mut retries = 0;
+  let mut last_error = None;
+
+  while retries < MAX_RETRIES {
+    match client.send_transaction(&tx) {
+      Ok(signature) => {
+        println!(
+          "Transaction sent successfully with signature: {}",
+          signature
+        );
+        return Ok(signature);
+      }
+      Err(err) => {
+        println!(
+          "Failed to send transaction (attempt {}): {}",
+          retries + 1,
+          err
+        );
+        last_error = Some(err);
+        retries += 1;
+        if retries < MAX_RETRIES {
+          tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+        }
+      }
+    }
+  }
+
+  Err(anyhow!(
+    "Failed to send transaction after {} attempts: {}",
+    MAX_RETRIES,
+    last_error.map_or_else(|| "Unknown error".to_string(), |e| e.to_string())
+  ))
 }
 
-pub async fn confirm_executed_swap_tx(signature: &str) -> Result<bool> {
+pub async fn confirm_executed_swap_tx(signature: &Signature) -> Result<bool> {
   let rpc_url =
     env::var("SOLANA_RPC_URL").context("Failed to retrieve SOLANA_RPC_URL from environment")?;
 
-  let client = RpcClient::new(rpc_url);
-  let confirmation = client
-    .confirm_transaction_with_spinner(
-      signature,
-      &client.get_latest_blockhash()?,
-      CommitmentConfig::finalized(),
-    )
+  let client = RpcClient::new_with_timeout(rpc_url, Duration::from_secs(60));
+
+  // Get latest blockhash with retry
+  let latest_blockhash = retry_operation(|| client.get_latest_blockhash())
+    .await
+    .context("Failed to get latest blockhash")?;
+
+  // Confirm the transaction
+  client
+    .confirm_transaction_with_spinner(signature, &latest_blockhash, CommitmentConfig::finalized())
     .context("Failed to confirm transaction")?;
 
-  if confirmation {
-    println!("Transaction confirmed and finalized!");
-    Ok(true)
-  } else {
-    Err(anyhow::anyhow!("Transaction was not confirmed"))
-  }
+  Ok(true)
 }
 
+/// Result structure for swap transactions
 #[derive(Debug)]
 pub struct SwapTxResult {
   pub transaction_hash: String,
   pub success: bool,
 }
 
+/// Execute a swap transaction for a specific user
 pub async fn execute_user_swap_tx(
   user_id: i32,
   wallet_id: i32,
   db: DatabaseConnection,
   unsigned_tx: VersionedTransaction,
-) -> Result<SwapTxResult, String> {
+) -> Result<SwapTxResult> {
+  // Validate user existence
   let user = users::Entity::find_by_id(user_id)
-    .one(db)
+    .one(&db)
     .await
-    .map_err(|e| e.to_string())?;
+    .context("Database error while fetching user")?
+    .ok_or_else(|| anyhow!("User not found: {}", user_id))?;
 
-  if user.is_none() {
-    return Err("User doesn't exist".to_string());
-  }
-
-  let wallet_record = wallets::Entity::find_by_id(wallet_id)
-    .one(db)
+  // Validate wallet existence
+  let wallet = wallets::Entity::find_by_id(wallet_id)
+    .one(&db)
     .await
-    .map_err(|e| e.to_string())?;
+    .context("Database error while fetching wallet")?
+    .ok_or_else(|| anyhow!("Wallet not found: {}", wallet_id))?;
 
-  let wallet = match wallet_record {
-    Some(w) => w,
-    None => return Err("Wallet doesn't exist".to_string()),
-  };
-
+  // Prepare wallet details for decryption
   let encrypted_wallet_details = EncryptPKDetails {
     salt: wallet.salt,
     secret_key: wallet.secret_key,
-    encrypt_private_key: wallet.encrypted_private_key,
+    encrypted_private_key: wallet.encrypted_private_key,
   };
 
-  let decrypted_pk = decrypt_private_key(encrypted_wallet_details)
-    .map_err(|e| format!("Error decrypting private key: {}", e))?;
+  // Decrypt private key and create keypair
+  let decrypted_pk =
+    decrypt_private_key(&encrypted_wallet_details).context("Failed to decrypt private key")?;
 
-  let keypair = keypair_from_base58_string(decrypted_pk);
+  let keypair =
+    keypair_from_private_key(&decrypted_pk).context("Failed to create Keypair from private key")?;
 
-  let tx_completion_attempt = execute_raydium_swap_tx(unsigned_tx, &keypair)
+  // Execute the swap transaction
+  let signature = execute_raydium_swap_tx(unsigned_tx, &keypair)
     .await
-    .map_err(|e| format!("Error executing swap transaction: {}", e))?;
+    .context("Failed to execute swap transaction")?;
 
-  let is_confirmed = confirm_executed_swap_tx(&tx_completion_attempt)
+  // Confirm the transaction
+  let is_confirmed = confirm_executed_swap_tx(&signature)
     .await
-    .map_err(|e| format!("Error confirming transaction: {}", e))?;
+    .context("Failed to confirm transaction")?;
 
-  let response = SwapTxResult {
-    transaction_hash: tx_completion_attempt,
+  Ok(SwapTxResult {
+    transaction_hash: signature.to_string(),
     success: is_confirmed,
-  };
+  })
+}
 
-  Ok(response)
+/// Helper function to retry operations
+async fn retry_operation<F, T, E>(operation: F) -> Result<T>
+where
+  F: Fn() -> std::result::Result<T, E>,
+  E: std::error::Error + Send + Sync + 'static,
+{
+  let mut retries = 0;
+  let mut last_error = None;
+
+  while retries < MAX_RETRIES {
+    match operation() {
+      Ok(result) => return Ok(result),
+      Err(err) => {
+        println!("Operation failed (attempt {}): {}", retries + 1, err);
+        last_error = Some(err);
+        retries += 1;
+        if retries < MAX_RETRIES {
+          tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+        }
+      }
+    }
+  }
+
+  Err(anyhow!(
+    "Operation failed after {} attempts: {}",
+    MAX_RETRIES,
+    last_error.unwrap()
+  ))
 }
