@@ -154,7 +154,7 @@ pub fn get_wallet_sol_balance(address: &str) -> f64 {
   let owner_pubkey = Pubkey::from_str(address).unwrap();
   let rpc_url = env::var("SOLANA_RPC_URL");
   let connection = RpcClient::new(rpc_url.unwrap());
-  return connection.get_balance(&owner_pubkey).unwrap() as f64;
+  connection.get_balance(&owner_pubkey).unwrap() as f64
 }
 
 pub async fn register_wallet_tokens(
@@ -314,7 +314,7 @@ async fn get_token_balance(
 
       let mint = info["mint"].as_str().unwrap_or_default().to_string();
 
-      if (mint == mint_address.to_string()) {
+      if mint == mint_address.to_string() {
         let amount_str = info["tokenAmount"]["amount"].as_str().unwrap_or("0");
         let amount = amount_str.parse::<f64>().unwrap_or(0.0);
         let decimals = info["tokenAmount"]["decimals"].as_u64().unwrap_or(0) as u8;
