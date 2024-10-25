@@ -8,6 +8,8 @@ use crate::jobs::cron::{
 use chrono::{Local, Utc};
 use tokio_schedule::{every, Job};
 
+use super::price::refresh_sol_tokens_to_watch;
+
 pub async fn start_cron() {
   let every_second = every(1).seconds().in_timezone(&Utc).perform(|| async {
     println!("schedule_task job - {:?}", Local::now());
@@ -20,6 +22,11 @@ pub async fn start_cron() {
       eprintln!("Failed to refresh token prices: {:?}", err);
     }
   });
+
+  let refresh_sol_tokens_to_watch = every(3)
+    .minutes()
+    .in_timezone(&Utc)
+    .perform(|| async { refresh_sol_tokens_to_watch().await });
 
   let update_spl_tokens_in_wallet = every(3).minutes().in_timezone(&Utc).perform(|| async {
     println!(
@@ -39,8 +46,10 @@ pub async fn start_cron() {
   });
 
   tokio::spawn(every_second);
+  tokio::spawn(refresh_sol_tokens_to_watch);
   tokio::spawn(sol_price_update);
   tokio::spawn(update_spl_tokens_in_wallet);
   tokio::spawn(run_default_stop_loss);
+
   // sol_price_update.await;
 }
