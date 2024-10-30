@@ -1,6 +1,6 @@
 # David's Sling (WIP)
 
-A small and simple trading bot.
+A small and simple trading bot leveraging Telegram as an interface. The bot is designed to watch the block chain for new launches and inform the trader of high liquidity launches. 
 
 Go to t.me/DavidsSlingBot to begin.
 
