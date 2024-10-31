@@ -1,4 +1,4 @@
-use crate::{db, integrations::raydium::RaydiumPriceFetcher};
+use crate::{db, integrations::raydium::RaydiumPriceFetcher, utils::cache};
 use entity::{token_prices as prices, tokens};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 
@@ -61,4 +61,27 @@ pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>
   futures::future::join_all(tasks).await;
 
   Ok(())
+}
+
+pub async fn refresh_sol_tokens_to_watch() -> () {
+  let db = db::connect_db()
+    .await
+    .expect("Failed to connect to the database");
+  let tokens = tokens::Entity::find()
+    .filter(tokens::Column::Chain.eq("solana"))
+    .all(&db)
+    .await
+    .map_err(|e| format!("Database error: {}", e))
+    .unwrap();
+
+  let mut token_addresses = String::from("So11111111111111111111111111111111111111112");
+
+  for token in tokens {
+    let contract_address = token.contract_address;
+    if token_addresses != "So11111111111111111111111111111111111111112" {
+      token_addresses.push(',');
+      token_addresses.push_str(&contract_address);
+    }
+  }
+  cache::set_memcache_string("token_addresses".to_owned(), token_addresses, Some(5 * 3));
 }

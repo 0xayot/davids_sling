@@ -11,11 +11,18 @@ use serde_json::Value;
 use solana_sdk::transaction::VersionedTransaction;
 
 use crate::utils::cache::{
-  get_memcache_string_hash, set_memcache_hashmap, set_memcache_string_hashmap,
+  self, get_memcache_string_hash, set_memcache_hashmap, set_memcache_string_hashmap,
 };
 
 pub struct RaydiumPriceFetcher {
   client: Client,
+}
+
+#[derive(Debug, Deserialize)]
+struct RaydiumMintPriceResponse {
+  id: String,
+  success: bool,
+  data: HashMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -117,23 +124,33 @@ impl RaydiumPriceFetcher {
     }
   }
 
-  pub async fn get_token_price_list(&self) -> Result<HashMap<String, f64>> {
-    let url =
-      "https://api.raydium.io/v2/main/price?tokens=So11111111111111111111111111111111111111112";
+  pub async fn get_token_price_list(
+    &self,
+    addresses: Option<String>,
+  ) -> Result<HashMap<String, f64>> {
+    let token_list = if let Some(addresses) = addresses {
+      addresses
+    } else {
+      // Retrieve from cache
+      cache::get_memcache_string("token_addresses")
+        .unwrap_or_else(|| String::from("So11111111111111111111111111111111111111112"))
+    };
 
-    // Fetch token price
+    let url = format!("https://api-v3.raydium.io/mint/price?mints={}", token_list);
+
     let response = self
       .client
-      .get(&*url)
+      .get(&url)
       .send()
       .await
       .context("Failed to send request to get token prices")?;
-    let json: Value = response
+
+    let json: RaydiumMintPriceResponse = response
       .json()
       .await
       .context("Failed to parse token prices response as JSON")?;
 
-    let price_map = self.parse_price_response(json)?;
+    let price_map = self.parse_price_response(json.data)?;
 
     set_memcache_hashmap("raydium_price".to_owned(), price_map.clone(), Some(5));
 
@@ -281,15 +298,12 @@ impl RaydiumPriceFetcher {
     Ok(versioned_tx)
   }
 
-  fn parse_price_response(&self, json: Value) -> Result<HashMap<String, f64>> {
+  fn parse_price_response(&self, json: HashMap<String, String>) -> Result<HashMap<String, f64>> {
     let mut price_map: HashMap<String, f64> = HashMap::new();
 
-    // Assuming the JSON is an object
-    if let Value::Object(obj) = json {
-      for (key, value) in obj {
-        if let Some(num) = value.as_f64() {
-          price_map.insert(key, num);
-        }
+    for (key, value) in json {
+      if let Ok(num) = value.parse::<f64>() {
+        price_map.insert(key, num);
       }
     }
 
@@ -297,7 +311,9 @@ impl RaydiumPriceFetcher {
   }
 
   pub async fn get_token_price_in_sol(&self, token_mint_address: &str) -> Result<f64> {
-    let price_map = self.get_token_price_list().await?;
+    let price_map = self
+      .get_token_price_list(Some(token_mint_address.to_string()))
+      .await?;
 
     let price_usd = price_map
       .get(token_mint_address)
@@ -315,7 +331,9 @@ impl RaydiumPriceFetcher {
 
   pub async fn get_token_price_in_usd(&self, token_mint_address: &str) -> Result<f64> {
     // Fetch token price list to ensure prices are updated in cache
-    let price_map = self.get_token_price_list().await?;
+    let price_map = self
+      .get_token_price_list(Some(token_mint_address.to_string()))
+      .await?;
 
     // Extract the price in USD for the token
     let price_usd = price_map
