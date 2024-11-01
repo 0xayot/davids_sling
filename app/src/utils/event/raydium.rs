@@ -1,10 +1,15 @@
-use entity::raydium_token_launches;
-use sea_orm::{EntityTrait, Set};
+use anyhow::{anyhow, Context, Result};
+use entity::{raydium_token_launches, users};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use std::env;
 use tokio::time::{sleep, Duration};
 
-use crate::{db, integrations::dexscreener, utils::price::solana::fetch_token_price};
+use crate::{
+  db,
+  integrations::dexscreener::{self, Pair},
+  utils::{notifications::notify_user_by_telegram, price::solana::fetch_token_price},
+};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LPInfo {
   address: String,
@@ -96,43 +101,82 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       .await
       .map_err(|e| e.to_string());
   } else if pool_sol_liquidity > lower_limit && pool_sol_liquidity < mid_limit {
-    // let mut loserLaunch = raydium_token_launches::ActiveModel {
-    //   contract_address: Set(data.base_info.address),
-    //   creator_address: Set(data.creator),
-    //   evaluation: Set(Some("skip".to_string())),
-    //   launch_class: Set(Some("below_limit".to_string())),
-    //   launch_liquidity: Set(data.base_info.lp_amount as f32),
-    //   launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
-    //   ..Default::default()
-    // };
-    // if let Some(info) = token_info_from_dexscreener {
-    //   loserLaunch.meta = Set(Some(serde_json::to_value(info.pairs[0]).unwrap()));
-    // } else {
-    //   sleep(Duration::from_secs(120)).await;
+    let mut loserLaunch = raydium_token_launches::ActiveModel {
+      contract_address: Set(contract_address.clone()),
+      creator_address: Set(data.creator),
+      evaluation: Set(Some("skip".to_string())),
+      launch_class: Set(Some("lower_limit".to_string())),
+      launch_liquidity: Set(data.base_info.lp_amount as f32),
+      launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
+      ..Default::default()
+    };
+    if let Some(info) = token_info_from_dexscreener {
+      if let Some(first_pair) = info.pairs.get(0) {
+        loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+      }
+    } else {
+      sleep(Duration::from_secs(120)).await;
 
-    //   match dexscreener::fetch_token_data(&data.base_info.address).await {
-    //     Ok(data) => {
-    //       loserLaunch.meta = Set(Some(serde_json::to_value(data.pairs[0]).unwrap()));
-    //     }
-    //     Err(_e) => {
-    //       eprintln!("Failed to query dexscreener");
-    //     }
-    //   };
-    // }
-    // raydium_token_launches::Entity::insert(loserLaunch)
-    //   .exec(&db)
-    //   .await
-    //   .map_err(|e| e.to_string());
-
-    // notify users that want launches
+      match dexscreener::fetch_token_data(contract_address).await {
+        Ok(data) => {
+          if let Some(first_pair) = data.pairs.get(0) {
+            loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+          }
+        }
+        Err(_e) => {
+          eprintln!("Failed to query dexscreener");
+        }
+      };
+    }
+    let _ = raydium_token_launches::Entity::insert(loserLaunch)
+      .exec(&db)
+      .await
+      .map_err(|e| e.to_string());
   } else if pool_sol_liquidity >= mid_limit && pool_sol_liquidity < normal_limit {
-    println!("Liquidity is good.");
+    println!("retrying dex screener for lower limit launch.");
     sleep(Duration::from_secs(120)).await;
 
     // Replace with your saving logic
     // Check if it's a pump.fun if yes buy
   } else if pool_sol_liquidity >= normal_limit && pool_sol_liquidity < pro_limit {
     println!("Liquidity is between the normal limit and pro limit.");
+
+    let mut goodLaunch = raydium_token_launches::ActiveModel {
+      contract_address: Set(contract_address.clone()),
+      creator_address: Set(data.creator),
+      evaluation: Set(Some("track".to_string())),
+      launch_class: Set(Some("below_limit".to_string())),
+      launch_liquidity: Set(data.base_info.lp_amount as f32),
+      launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
+      ..Default::default()
+    };
+    let notification_message = format!(
+      "a good launch {} with {} liquidity (${})",
+      contract_address, pool_sol_liquidity, pool_sol_liquidity_usd
+    );
+    if let Some(info) = token_info_from_dexscreener {
+      if let Some(first_pair) = info.pairs.get(0) {
+        goodLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+      }
+    } else {
+      sleep(Duration::from_secs(30)).await;
+
+      match dexscreener::fetch_token_data(contract_address).await {
+        Ok(data) => {
+          if let Some(first_pair) = data.pairs.get(0) {
+            goodLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+          }
+        }
+        Err(_e) => {
+          eprintln!("Failed to query dexscreener");
+        }
+      };
+    }
+    let _ = raydium_token_launches::Entity::insert(goodLaunch)
+      .exec(&db)
+      .await
+      .map_err(|e| e.to_string());
+    let _ = notify_user_of_launch(notification_message, db).await;
   } else if pool_sol_liquidity >= pro_limit {
     println!("Liquidity is crazy");
     sleep(Duration::from_secs(240)).await;
@@ -140,4 +184,33 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   }
 
   // let is_boosted_token = /* Your logic to determine if the token is boosted */;
+}
+
+pub async fn notify_user_of_launch(msg: String, db: DatabaseConnection) -> Result<()> {
+  let users = users::Entity::find()
+    .filter(users::Column::TgId.is_not_null())
+    .all(&db) // Dereferencing Arc to get a reference to DatabaseConnection
+    .await
+    .context("Database error")?;
+
+  let mut tasks = vec![];
+
+  for user in users {
+    let tg_id_string = user.tg_id;
+    let tg_id: i64 = tg_id_string
+      .parse()
+      .context("Failed to parse tg_id to i64")?;
+    let message = msg.clone();
+
+    let task = tokio::spawn(async move {
+      if let Err(e) = notify_user_by_telegram(tg_id, &message).await {
+        eprintln!("Error notifying user {}: {}", tg_id, e);
+      }
+    });
+    tasks.push(task);
+  }
+
+  futures::future::join_all(tasks).await;
+
+  Ok(())
 }
