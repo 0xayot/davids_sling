@@ -15,6 +15,7 @@ impl MigrationTrait for Migration {
           .col(
             ColumnDef::new(RaydiumTokenLaunch::ContractAddress)
               .string()
+              .unique_key()
               .not_null(),
           )
           .col(
