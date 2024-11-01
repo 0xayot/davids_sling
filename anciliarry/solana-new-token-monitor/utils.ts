@@ -1,4 +1,6 @@
 import fs from "fs";
+import dotenv from "dotenv";
+dotenv.config();
 
 export function storeData(dataPath: string, newData: any) {
   fs.readFile(dataPath, (err, fileData) => {
@@ -26,6 +28,7 @@ export function storeData(dataPath: string, newData: any) {
 }
 
 export async function sendDataToDavidSling(data: any) {
+  dotenv.config();
   const url = process.env.DAVID_SLING_URL;
   const authKey = process.env.DAVIDS_POUCH_KEY;
   if (!url || !authKey) {
