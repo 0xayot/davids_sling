@@ -3,16 +3,16 @@
 
 use anyhow::{Error, Result};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{self, Value};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct ResponseData {
   pub schemaVersion: String,
   pub pairs: Vec<Pair>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Pair {
   pub baseToken: Token,
   pub chainId: String,
@@ -21,32 +21,32 @@ pub struct Pair {
   pub liquidity: Liquidity,
   pub marketCap: f64,
   pub pairAddress: String,
-  pub pairCreatedAt: Option<u64>, // Make optional for flexibility
+  pub pairCreatedAt: Option<u64>,
   pub priceChange: PriceChange,
   pub priceNative: String,
   pub priceUsd: String,
   pub quoteToken: Token,
   pub url: String,
   pub volume: Volume,
-  pub boosts: Option<Boosts>, // Optional to handle cases where it might be missing
-  pub info: Option<Info>,     // Optional for cases where it might be missing
+  pub boosts: Option<Boosts>,
+  pub info: Option<Info>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Token {
   pub address: String,
   pub name: String,
   pub symbol: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Liquidity {
   pub usd: f64,
   pub base: f64,
   pub quote: f64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct PriceChange {
   pub h1: f64,
   pub h24: f64,
@@ -54,7 +54,7 @@ pub struct PriceChange {
   pub m5: f64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Volume {
   pub h1: f64,
   pub h24: f64,
@@ -62,25 +62,25 @@ pub struct Volume {
   pub m5: f64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Boosts {
   pub active: u32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Info {
   pub imageUrl: Option<String>,
   pub socials: Option<Vec<Social>>,
   pub websites: Option<Vec<Website>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Social {
   pub r#type: String, // Use r#type to avoid keyword collision
   pub url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Website {
   pub label: String,
   pub url: String,
