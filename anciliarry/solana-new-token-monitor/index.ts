@@ -1,5 +1,5 @@
 import { rayFee, solanaConnection } from "./constants";
-import { storeData } from "./utils";
+import { sendDataToDavidSling, storeData } from "./utils";
 import fs from "fs";
 import chalk from "chalk";
 import path from "path";
@@ -83,25 +83,19 @@ async function monitorNewTokens(connection: Connection) {
             lpSignature: signature,
             creator: signer,
             timestamp: new Date().toISOString(),
-            baseInfo: {
-              baseAddress,
-              baseDecimals,
-              baseLpAmount,
+            base_info: {
+              address: baseAddress,
+              decimals: baseDecimals,
+              lp_amount: baseLpAmount,
             },
-            quoteInfo: {
-              quoteAddress: quoteAddress,
-              quoteDecimals: quoteDecimals,
-              quoteLpAmount: quoteLpAmount,
+            quote_info: {
+              address:quoteAddress,
+             decimals: quoteDecimals,
+              lp_amount: quoteLpAmount,
             },
           };
 
-          const txPath = path.join(
-            __dirname,
-            "data",
-            "new_solana_tokensy.json"
-          );
-
-          await storeData(txPath, parsedTransaction);
+          await sendDataToDavidSling(newTokenData)
 
           //store new tokens data in data folder
           await storeData(dataPath, newTokenData);
