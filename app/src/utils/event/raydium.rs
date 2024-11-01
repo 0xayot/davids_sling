@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use entity::{raydium_token_launches, users};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use tokio::time::{sleep, Duration};
 
 use crate::{
   db,
-  integrations::dexscreener::{self, Pair},
+  integrations::dexscreener::{self},
   utils::{notifications::notify_user_by_telegram, price::solana::fetch_token_price},
 };
 #[derive(Debug, Deserialize, Serialize)]
@@ -60,7 +60,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   // Wait for 5 seconds before calling dexscreener
   sleep(Duration::from_secs(5)).await;
 
-  let mut token_info_from_dexscreener =
+  let token_info_from_dexscreener =
     match dexscreener::fetch_token_data(&data.base_info.address).await {
       Ok(data) => Some(data),
       Err(_e) => None,
@@ -69,7 +69,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   if pool_sol_liquidity <= lower_limit {
     println!("loser liquidity.");
 
-    let mut loserLaunch = raydium_token_launches::ActiveModel {
+    let mut loser_launch = raydium_token_launches::ActiveModel {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("skip".to_string())),
@@ -80,15 +80,15 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
     };
     if let Some(info) = token_info_from_dexscreener {
       if let Some(first_pair) = info.pairs.get(0) {
-        loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+        loser_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
       }
     } else {
-      sleep(Duration::from_secs(120)).await;
+      println!("Retrying dexscreener below launch limit.");
 
       match dexscreener::fetch_token_data(contract_address).await {
         Ok(data) => {
           if let Some(first_pair) = data.pairs.get(0) {
-            loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+            loser_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
           }
         }
         Err(_e) => {
@@ -96,12 +96,15 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
         }
       };
     }
-    let _ = raydium_token_launches::Entity::insert(loserLaunch)
+
+    println!("It reached here");
+
+    let _ = raydium_token_launches::Entity::insert(loser_launch)
       .exec(&db)
       .await
       .map_err(|e| e.to_string());
   } else if pool_sol_liquidity > lower_limit && pool_sol_liquidity < mid_limit {
-    let mut loserLaunch = raydium_token_launches::ActiveModel {
+    let mut lower_limit_launch = raydium_token_launches::ActiveModel {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("skip".to_string())),
@@ -112,15 +115,16 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
     };
     if let Some(info) = token_info_from_dexscreener {
       if let Some(first_pair) = info.pairs.get(0) {
-        loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+        lower_limit_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
       }
     } else {
-      sleep(Duration::from_secs(120)).await;
+      println!("retrying dex screener for lower limit launch.");
+      sleep(Duration::from_secs(30)).await;
 
       match dexscreener::fetch_token_data(contract_address).await {
         Ok(data) => {
           if let Some(first_pair) = data.pairs.get(0) {
-            loserLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+            lower_limit_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
           }
         }
         Err(_e) => {
@@ -128,20 +132,51 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
         }
       };
     }
-    let _ = raydium_token_launches::Entity::insert(loserLaunch)
+    let _ = raydium_token_launches::Entity::insert(lower_limit_launch)
       .exec(&db)
       .await
       .map_err(|e| e.to_string());
   } else if pool_sol_liquidity >= mid_limit && pool_sol_liquidity < normal_limit {
-    println!("retrying dex screener for lower limit launch.");
-    sleep(Duration::from_secs(120)).await;
+    println!("processing mid launch.");
 
-    // Replace with your saving logic
+    let mut mid_limit_launch = raydium_token_launches::ActiveModel {
+      contract_address: Set(contract_address.clone()),
+      creator_address: Set(data.creator),
+      evaluation: Set(Some("track".to_string())),
+      launch_class: Set(Some("mid_limit".to_string())),
+      launch_liquidity: Set(data.base_info.lp_amount as f32),
+      launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
+      ..Default::default()
+    };
+    if let Some(info) = token_info_from_dexscreener {
+      if let Some(first_pair) = info.pairs.get(0) {
+        mid_limit_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+      }
+    } else {
+      println!("retrying dex screener for mid limit launch.");
+      sleep(Duration::from_secs(30)).await;
+
+      match dexscreener::fetch_token_data(contract_address).await {
+        Ok(data) => {
+          if let Some(first_pair) = data.pairs.get(0) {
+            mid_limit_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+          }
+        }
+        Err(_e) => {
+          eprintln!("Failed to query dexscreener");
+        }
+      };
+    }
+    let _ = raydium_token_launches::Entity::insert(mid_limit_launch)
+      .exec(&db)
+      .await
+      .map_err(|e| e.to_string());
+
     // Check if it's a pump.fun if yes buy
   } else if pool_sol_liquidity >= normal_limit && pool_sol_liquidity < pro_limit {
     println!("Liquidity is between the normal limit and pro limit.");
 
-    let mut goodLaunch = raydium_token_launches::ActiveModel {
+    let mut good_launch = raydium_token_launches::ActiveModel {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("track".to_string())),
@@ -156,15 +191,16 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
     );
     if let Some(info) = token_info_from_dexscreener {
       if let Some(first_pair) = info.pairs.get(0) {
-        goodLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+        good_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
       }
     } else {
+      println!("retrying dex screener for good launch.");
       sleep(Duration::from_secs(30)).await;
 
       match dexscreener::fetch_token_data(contract_address).await {
         Ok(data) => {
           if let Some(first_pair) = data.pairs.get(0) {
-            goodLaunch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+            good_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
           }
         }
         Err(_e) => {
@@ -172,15 +208,51 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
         }
       };
     }
-    let _ = raydium_token_launches::Entity::insert(goodLaunch)
+    let _ = raydium_token_launches::Entity::insert(good_launch)
       .exec(&db)
       .await
       .map_err(|e| e.to_string());
     let _ = notify_user_of_launch(notification_message, db).await;
   } else if pool_sol_liquidity >= pro_limit {
     println!("Liquidity is crazy");
-    sleep(Duration::from_secs(240)).await;
-    // attempt buy and send notification
+
+    let mut crazy_launch = raydium_token_launches::ActiveModel {
+      contract_address: Set(contract_address.clone()),
+      creator_address: Set(data.creator),
+      evaluation: Set(Some("track".to_string())),
+      launch_class: Set(Some("below_limit".to_string())),
+      launch_liquidity: Set(data.base_info.lp_amount as f32),
+      launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
+      ..Default::default()
+    };
+    let notification_message = format!(
+      "a crazy launch {} with {} liquidity (${})",
+      contract_address, pool_sol_liquidity, pool_sol_liquidity_usd
+    );
+    if let Some(info) = token_info_from_dexscreener {
+      if let Some(first_pair) = info.pairs.get(0) {
+        crazy_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+      }
+    } else {
+      println!("retrying dex screener for crazy launch.");
+      sleep(Duration::from_secs(30)).await;
+
+      match dexscreener::fetch_token_data(contract_address).await {
+        Ok(data) => {
+          if let Some(first_pair) = data.pairs.get(0) {
+            crazy_launch.meta = Set(Some(serde_json::to_value(first_pair).unwrap()));
+          }
+        }
+        Err(_e) => {
+          eprintln!("Failed to query dexscreener");
+        }
+      };
+    }
+    let _ = raydium_token_launches::Entity::insert(crazy_launch)
+      .exec(&db)
+      .await
+      .map_err(|e| e.to_string());
+    let _ = notify_user_of_launch(notification_message, db).await;
   }
 
   // let is_boosted_token = /* Your logic to determine if the token is boosted */;
