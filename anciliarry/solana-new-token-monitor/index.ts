@@ -89,20 +89,24 @@ async function monitorNewTokens(connection: Connection) {
               lp_amount: baseLpAmount,
             },
             quote_info: {
-              address:quoteAddress,
-             decimals: quoteDecimals,
+              address: quoteAddress,
+              decimals: quoteDecimals,
               lp_amount: quoteLpAmount,
             },
           };
 
-          if(newTokenData.quote_info.lp_amount > 0){
-            await sendDataToDavidSling(newTokenData)
+          if (newTokenData.quote_info.lp_amount > 0) {
+            await sendDataToDavidSling(newTokenData);
 
             //store new tokens data in data folder
             await storeData(dataPath, newTokenData);
           }
         } catch (error) {
-          const errorMessage = `error occured in new solana token log callback function, ${JSON.stringify(error, null, 2)}`;
+          const errorMessage = `error occured in new solana token log callback function, ${JSON.stringify(
+            error,
+            null,
+            2
+          )}`;
           console.log(chalk.red(errorMessage));
           // Save error logs to a separate file
           fs.appendFile(
@@ -117,7 +121,11 @@ async function monitorNewTokens(connection: Connection) {
       "confirmed"
     );
   } catch (error) {
-    const errorMessage = `error occured in new sol lp monitor, ${JSON.stringify(error, null, 2)}`;
+    const errorMessage = `error occured in new sol lp monitor, ${JSON.stringify(
+      error,
+      null,
+      2
+    )}`;
     console.log(chalk.red(errorMessage));
     // Save error logs to a separate file
     fs.appendFile("errorNewLpsLogs.txt", `${errorMessage}\n`, function (err) {
