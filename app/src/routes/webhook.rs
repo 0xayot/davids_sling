@@ -11,10 +11,6 @@ async fn raydium_token_event(
     return HttpResponse::NotFound().finish();
   }
 
-  println!("Request Body: {:?}", body.0);
-
-  // call handle raydium token event
-
   tokio::spawn(async {
     handle_token_created_event(body.into_inner()).await;
   });

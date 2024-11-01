@@ -97,8 +97,6 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       };
     }
 
-    println!("It reached here");
-
     let _ = raydium_token_launches::Entity::insert(loser_launch)
       .exec(&db)
       .await
@@ -265,6 +263,7 @@ pub async fn notify_user_of_launch(msg: String, db: DatabaseConnection) -> Resul
     .await
     .context("Database error")?;
 
+  println!("Notifiying users");
   let mut tasks = vec![];
 
   for user in users {
