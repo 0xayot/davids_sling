@@ -33,7 +33,6 @@ async fn process_single_order(
     }
   };
 
-  // Get wallet
   let wallet = match wallets::Entity::find_by_id(order.wallet_id).one(db).await? {
     Some(wallet) => wallet,
     None => {
