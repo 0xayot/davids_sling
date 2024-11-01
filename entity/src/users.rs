@@ -7,14 +7,14 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
   #[sea_orm(primary_key)]
   pub id: i32,
-  #[sea_orm(unique)]
+  #[sea_orm(column_type = "Text", nullable, unique)]
   pub email: Option<String>,
   #[sea_orm(unique)]
   pub tg_id: String,
   pub tg_token: Option<String>,
   pub encrypted_password: String,
-  pub created_at: DateTime,
-  pub updated_at: DateTime,
+  pub created_at: DateTimeWithTimeZone,
+  pub updated_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -1,6 +1,6 @@
-use std::env;
-
 use serde::{Deserialize, Serialize};
+use std::env;
+use tokio::time::{sleep, Duration};
 
 use crate::integrations::dexscreener;
 #[derive(Debug, Deserialize, Serialize)]
@@ -20,7 +20,6 @@ pub struct RaydiumTokenEvent {
 
 pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   // Assuming these are float values, parse them from environment variables
-  println!("Liquidity is between the mid limit and normal limit.");
 
   let lower_limit: f64 = env::var("LOWER_LAUNCH_LIMIT")
     .unwrap_or_else(|_| "30.0".to_string())
@@ -45,35 +44,40 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   // Copy out pool value
   let pool_sol_liquidity = data.quote_info.lp_amount;
 
-  // Differentiate actions based on the value of the liquidity
-  if pool_sol_liquidity <= lower_limit {
-    // delay 2 mins  and save the token
-  } else if pool_sol_liquidity > lower_limit && pool_sol_liquidity < mid_limit {
+  // Wait for 5 seconds before calling dexscreener
+  sleep(Duration::from_secs(5)).await;
 
-    // delay 2 mins  and save the token
-  } else if pool_sol_liquidity >= mid_limit && pool_sol_liquidity < normal_limit {
-    // delay 2 mins  and save the token
-    // check if its a pump.fun if yes buy
-  } else if pool_sol_liquidity >= normal_limit && pool_sol_liquidity < pro_limit {
-    // delay 2 mins  and save the token
-    // check if its a pump.fun if yes buy
-  } else if pool_sol_liquidity >= pro_limit {
-    // delay 2 mins  and save the token
-    // check if the liquidit is above pro limit in usd
-    // check if its a pump.fun if yes buy
-  }
-
-  let token_info_from_dexscreener =
+  let mut token_info_from_dexscreener =
     match dexscreener::fetch_token_data(&data.base_info.address).await {
       Ok(data) => Some(data),
       Err(_e) => None,
     };
 
-  // Use token_info_from_dexscreener as an Option<ResponseData>
-  if let Some(info) = token_info_from_dexscreener {
-    // Process the retrieved token info
-  } else {
-    // Handle the case where fetching token data failed
+  if pool_sol_liquidity <= lower_limit {
+    println!("loser liquidity.");
+    if let Some(info) = token_info_from_dexscreener {
+    } else {
+      sleep(Duration::from_secs(120)).await;
+      token_info_from_dexscreener =
+        match dexscreener::fetch_token_data(&data.base_info.address).await {
+          Ok(data) => Some(data),
+          Err(_e) => None,
+        };
+      println!("Failed to fetch token data.");
+    }
+  } else if pool_sol_liquidity > lower_limit && pool_sol_liquidity < mid_limit {
+    println!("Liquidity is meh!");
+    sleep(Duration::from_secs(120)).await; // Replace with your saving logic
+  } else if pool_sol_liquidity >= mid_limit && pool_sol_liquidity < normal_limit {
+    println!("Liquidity is good.");
+    sleep(Duration::from_secs(120)).await; // Replace with your saving logic
+                                           // Check if it's a pump.fun if yes buy
+  } else if pool_sol_liquidity >= normal_limit && pool_sol_liquidity < pro_limit {
+    println!("Liquidity is between the normal limit and pro limit.");
+  } else if pool_sol_liquidity >= pro_limit {
+    println!("Liquidity is crazy");
+    sleep(Duration::from_secs(240)).await;
+    // attempt buy and send notification
   }
 
   // let is_boosted_token = /* Your logic to determine if the token is boosted */;
