@@ -15,6 +15,8 @@ pub struct Model {
   pub launch_liquidity: f32,
   #[sea_orm(column_type = "Float")]
   pub launch_liquidity_usd: f32,
+  #[sea_orm(column_type = "Float", nullable)]
+  pub launch_price_usd: Option<f32>,
   pub rugged_at: Option<i32>,
   pub lifespan: Option<i32>,
   pub meta: Option<Json>,

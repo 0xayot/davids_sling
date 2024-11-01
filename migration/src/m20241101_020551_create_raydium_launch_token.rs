@@ -34,6 +34,7 @@ impl MigrationTrait for Migration {
               .float()
               .not_null(),
           )
+          .col(ColumnDef::new(RaydiumTokenLaunch::LaunchPriceUsd).float())
           .col(ColumnDef::new(RaydiumTokenLaunch::RuggedAt).integer())
           .col(ColumnDef::new(RaydiumTokenLaunch::Lifespan).integer())
           .col(ColumnDef::new(RaydiumTokenLaunch::Meta).json())
@@ -77,6 +78,7 @@ pub enum RaydiumTokenLaunch {
   LaunchClass,
   LaunchLiquidity,
   LaunchLiquidityUsd,
+  LaunchPriceUsd,
   RuggedAt,
   Lifespan,
   Meta,
