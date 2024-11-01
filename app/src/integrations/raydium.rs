@@ -132,11 +132,13 @@ impl RaydiumPriceFetcher {
       addresses
     } else {
       // Retrieve from cache
-      cache::get_memcache_string("token_addresses")
-        .unwrap_or_else(|| String::from("So11111111111111111111111111111111111111112"))
+      cache::get_memcache_string("token_addresses").unwrap_or_else(|| String::from(""))
     };
 
-    let url = format!("https://api-v3.raydium.io/mint/price?mints={}", token_list);
+    let url = format!(
+      "https://api-v3.raydium.io/mint/price?mints=So11111111111111111111111111111111111111112,{}",
+      token_list
+    );
 
     let response = self
       .client
