@@ -23,6 +23,7 @@ impl MigrationTrait for Migration {
               .not_null(),
           )
           .col(ColumnDef::new(RaydiumTokenLaunch::Evaluation).string())
+          .col(ColumnDef::new(RaydiumTokenLaunch::LaunchClass).string())
           .col(
             ColumnDef::new(RaydiumTokenLaunch::LaunchLiquidity)
               .float()
@@ -36,11 +37,7 @@ impl MigrationTrait for Migration {
           .col(ColumnDef::new(RaydiumTokenLaunch::RuggedAt).integer())
           .col(ColumnDef::new(RaydiumTokenLaunch::Lifespan).integer())
           .col(ColumnDef::new(RaydiumTokenLaunch::Meta).json())
-          .col(
-            ColumnDef::new(RaydiumTokenLaunch::HasBoost)
-              .boolean()
-              .not_null(),
-          )
+          .col(ColumnDef::new(RaydiumTokenLaunch::HasBoost).boolean())
           .col(
             ColumnDef::new(RaydiumTokenLaunch::CreatedAt)
               .timestamp()
@@ -77,6 +74,7 @@ pub enum RaydiumTokenLaunch {
   ContractAddress,
   CreatorAddress,
   Evaluation,
+  LaunchClass,
   LaunchLiquidity,
   LaunchLiquidityUsd,
   RuggedAt,
