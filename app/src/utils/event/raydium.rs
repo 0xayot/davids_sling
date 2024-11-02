@@ -261,7 +261,7 @@ pub async fn notify_user_of_launch(msg: String, db: DatabaseConnection) -> Resul
     .await
     .context("Database error")?;
 
-  println!("Notifiying users");
+  println!(" \n Notifiying users \n");
   let mut tasks = vec![];
 
   for user in users {

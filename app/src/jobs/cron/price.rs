@@ -3,7 +3,7 @@ use crate::{
   integrations::{dexscreener, raydium::RaydiumPriceFetcher},
   utils::cache,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use entity::{raydium_token_launches, token_prices as prices, tokens};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 
@@ -97,14 +97,24 @@ pub async fn track_launch_event_token_prices() -> Result<(), Box<dyn Error>> {
   let db = db::connect_db()
     .await
     .expect("Failed to connect to the database");
-  let today = Utc::now().date_naive();
+  let today = Utc::now().date_naive(); // This gives you a Date<Utc>
+
+  // Create NaiveDate for today without time zone info
+  let naive_today = NaiveDate::from_ymd_opt(today.year(), today.month(), today.day())
+    .expect("Failed to create NaiveDate");
+
+  // Define the start and end of the day
+  let start_of_day = naive_today.and_hms_opt(0, 0, 0);
 
   let launches = raydium_token_launches::Entity::find()
     .filter(raydium_token_launches::Column::Evaluation.eq("track"))
-    .filter(raydium_token_launches::Column::CreatedAt.eq(today))
+    .filter(raydium_token_launches::Column::CreatedAt.gt(start_of_day))
+    // .filter(raydium_token_launches::Column::CreatedAt.(end_of_day))
     .all(&db)
     .await
     .map_err(|e| format!("Database error: {}", e))?;
+
+  println!("\n track launch \n {:?}", launches.len());
 
   for launch in launches {
     match dexscreener::fetch_token_data(&launch.contract_address).await {
