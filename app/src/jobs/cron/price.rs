@@ -3,11 +3,9 @@ use crate::{
   integrations::{dexscreener, raydium::RaydiumPriceFetcher},
   utils::cache,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use entity::{raydium_token_launches, token_prices as prices, tokens};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
-use serde_json::{json, Value};
-use sqlx::types::Json;
 
 pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>> {
   let db = db::connect_db()

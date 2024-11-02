@@ -46,13 +46,6 @@ pub async fn start_cron() {
     }
   });
 
-  let run_default_stop_loss = every(1).minutes().in_timezone(&Utc).perform(|| async {
-    println!(" running run_default_stop_loss - {:?}", Local::now());
-    if let Err(err) = default_stop_loss_strategy_solana().await {
-      eprintln!("Failed to refresh token prices: {:?}", err);
-    }
-  });
-
   let run_track_spied_launch = every(10).seconds().in_timezone(&Utc).perform(|| async {
     println!(" running track token launch lifespan - {:?}", Local::now());
     if let Err(err) = track_launch_event_token_prices().await {

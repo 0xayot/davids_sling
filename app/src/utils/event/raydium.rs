@@ -26,7 +26,6 @@ pub struct RaydiumTokenEvent {
 }
 
 pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
-  // Assuming these are float values, parse them from environment variables
   let db = db::connect_db()
     .await
     .expect("Failed to connect to the database");
@@ -51,13 +50,12 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
     .parse()
     .expect("PRO_LAUNCH_LIMIT must be a valid float");
 
-  // Copy out pool value
   let pool_sol_liquidity = data.quote_info.lp_amount;
   let sol_price = fetch_token_price(&data.quote_info.address).await.unwrap();
   let pool_sol_liquidity_usd = sol_price * pool_sol_liquidity;
   let contract_address = &data.base_info.address;
 
-  // Wait for 5 seconds before calling dexscreener
+  // Wait for 5 seconds before calling dexscreener becuse dexscreener may not have registered the launch
   sleep(Duration::from_secs(5)).await;
 
   let token_info_from_dexscreener =
@@ -170,7 +168,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       .await
       .map_err(|e| e.to_string());
 
-    // Check if it's a pump.fun if yes buy
+    //TODO:  Check if it's a pump.fun if yes buy
   } else if pool_sol_liquidity >= normal_limit && pool_sol_liquidity < pro_limit {
     println!("Liquidity is between the normal limit and pro limit.");
 
@@ -253,7 +251,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
     let _ = notify_user_of_launch(notification_message, db).await;
   }
 
-  // let is_boosted_token = /* Your logic to determine if the token is boosted */;
+  // TODO: let is_boosted_token = /* Your logic to determine if the token is boosted */;
 }
 
 pub async fn notify_user_of_launch(msg: String, db: DatabaseConnection) -> Result<()> {
