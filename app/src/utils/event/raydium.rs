@@ -56,7 +56,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   let contract_address = &data.base_info.address;
 
   // Wait for 5 seconds before calling dexscreener becuse dexscreener may not have registered the launch
-  sleep(Duration::from_secs(5)).await;
+  // sleep(Duration::from_secs(5)).await;
 
   let token_info_from_dexscreener =
     match dexscreener::fetch_token_data(&data.base_info.address).await {
@@ -139,7 +139,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("track".to_string())),
-      launch_class: Set(Some("mid_limit".to_string())),
+      launch_class: Set(Some("mid_launch".to_string())),
       launch_liquidity: Set(data.base_info.lp_amount as f32),
       launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
       ..Default::default()
@@ -176,7 +176,7 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("track".to_string())),
-      launch_class: Set(Some("below_limit".to_string())),
+      launch_class: Set(Some("pro_launch".to_string())),
       launch_liquidity: Set(data.base_info.lp_amount as f32),
       launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
       ..Default::default()
@@ -208,15 +208,16 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       .exec(&db)
       .await
       .map_err(|e| e.to_string());
-    let _ = notify_user_of_launch(notification_message, db).await;
+    match notify_users_of_launch(notification_message, db).await {
+      Ok(_) => println!("notified users of crazy launch"),
+      Err(e) => eprintln!("An error occured: \n {:?}", e),
+    };
   } else if pool_sol_liquidity >= pro_limit {
-    println!("Liquidity is crazy");
-
     let mut crazy_launch = raydium_token_launches::ActiveModel {
       contract_address: Set(contract_address.clone()),
       creator_address: Set(data.creator),
       evaluation: Set(Some("track".to_string())),
-      launch_class: Set(Some("below_limit".to_string())),
+      launch_class: Set(Some("crazy_launch".to_string())),
       launch_liquidity: Set(data.base_info.lp_amount as f32),
       launch_liquidity_usd: Set(pool_sol_liquidity_usd as f32),
       ..Default::default()
@@ -248,37 +249,41 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
       .exec(&db)
       .await
       .map_err(|e| e.to_string());
-    let _ = notify_user_of_launch(notification_message, db).await;
+
+    match notify_users_of_launch(notification_message, db).await {
+      Ok(_) => println!("notified users of crazy launch"),
+      Err(e) => eprintln!("An error occured: \n {:?}", e),
+    };
   }
 
   // TODO: let is_boosted_token = /* Your logic to determine if the token is boosted */;
 }
 
-pub async fn notify_user_of_launch(msg: String, db: DatabaseConnection) -> Result<()> {
+pub async fn notify_users_of_launch(msg: String, db: DatabaseConnection) -> Result<()> {
   let users = users::Entity::find()
     .filter(users::Column::TgId.is_not_null())
     .all(&db) // Dereferencing Arc to get a reference to DatabaseConnection
     .await
     .context("Database error")?;
 
-  println!(" \n Notifiying users \n");
   let mut tasks = vec![];
 
   for user in users {
-    let tg_id_string = user.tg_id;
-    let tg_id: i64 = tg_id_string
-      .parse()
-      .context("Failed to parse tg_id to i64")?;
+    let tg_id_string = user.tg_id.clone(); // Clone to avoid ownership issues
     let message = msg.clone();
 
-    let task = tokio::spawn(async move {
-      if let Err(e) = notify_user_by_telegram(tg_id, &message).await {
-        eprintln!("Error notifying user {}: {}", tg_id, e);
-      }
-    });
-    tasks.push(task);
+    // Attempt to parse tg_id, skip iteration if it fails
+    if let Ok(tg_id) = tg_id_string.parse::<i64>() {
+      let task = tokio::spawn(async move {
+        if let Err(e) = notify_user_by_telegram(tg_id, &message).await {
+          eprintln!("Error notifying user {}: {}", tg_id, e);
+        }
+      });
+      tasks.push(task);
+    } else {
+      eprintln!("Skipping user with invalid tg_id: {}", tg_id_string);
+    }
   }
-
   futures::future::join_all(tasks).await;
 
   Ok(())
