@@ -100,8 +100,6 @@ struct SwapRequest {
   wallet: String,
   wrapSol: bool,
   unwrapSol: bool,
-  inputAccount: Option<String>,
-  outputAccount: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -251,7 +249,7 @@ impl RaydiumPriceFetcher {
     input_mint: &str,
     output_mint: &str,
     tokenPk: &str,
-  ) -> Result<VersionedTransaction> {
+  ) -> Result<Vec<VersionedTransaction>> {
     let url_base = env::var("RAYDIUM_SWAP_URL")
       .unwrap_or_else(|_| "https://transaction-v1.raydium.io".to_string());
 
@@ -261,22 +259,13 @@ impl RaydiumPriceFetcher {
 
     let gas = self.get_priority_fee().await.unwrap();
 
-    let mut request_body = SwapRequest {
+    let request_body = SwapRequest {
       computeUnitPriceMicroLamports: gas.h,
       swapResponse: swap_quote,
-      txVersion: "V0".to_string(),
+      txVersion: "LEGACY".to_string(),
       wallet: taker_address.to_string(),
       wrapSol: wrap_sol,
       unwrapSol: unwrap_sol,
-      inputAccount: None,
-      outputAccount: None,
-    };
-    if !wrap_sol {
-      request_body.inputAccount = Some(tokenPk.to_string());
-    };
-
-    if !unwrap_sol {
-      request_body.outputAccount = Some(tokenPk.to_string());
     };
 
     let response = self.client.post(url).json(&request_body).send().await?;
@@ -292,12 +281,17 @@ impl RaydiumPriceFetcher {
       .collect::<std::result::Result<Vec<_>, _>>()
       .context("Failed to decode base64 transaction data")?;
 
-    let versioned_tx: VersionedTransaction =
-      deserialize(&all_tx_buf[0]).context("Failed to deserialize VersionedTransaction")?;
+    // let versioned_tx: VersionedTransaction =
+    //   deserialize(&all_tx_buf[0]).context("Failed to deserialize VersionedTransaction")?;
 
-    println!("Deserialized transaction: {:?}", versioned_tx);
+    // Ok(versioned_tx)
 
-    Ok(versioned_tx)
+    let versioned_txs: Vec<VersionedTransaction> = all_tx_buf
+      .into_iter()
+      .map(|buf| deserialize(&buf).context("Failed to deserialize VersionedTransaction"))
+      .collect::<std::result::Result<Vec<_>, _>>()?; // Collect errors if any
+
+    Ok(versioned_txs)
   }
 
   fn parse_price_response(&self, json: HashMap<String, String>) -> Result<HashMap<String, f64>> {

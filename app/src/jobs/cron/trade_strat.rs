@@ -3,7 +3,7 @@ use chrono::{Duration, Utc};
 use entity::{onchain_transactions, token_prices as prices, tokens, trade_orders, users, wallets};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
-use crate::utils::swap::solana::execute_user_swap_tx;
+use crate::utils::swap::solana::execute_user_swap_txs;
 use crate::utils::wallets::solana::get_token_balance;
 
 // Ideally, I should have used events that are emitted on price updates.
@@ -99,8 +99,10 @@ async fn process_single_order(
     }
   };
 
+  // let tx = swap.first().unwrap()
+
   // Execute swap and record transaction
-  match execute_user_swap_tx(user.id, wallet.id, db.clone(), swap).await {
+  match execute_user_swap_txs(user.id, wallet.id, db.clone(), swap).await {
     Ok(attempt) => {
       let transaction = onchain_transactions::ActiveModel {
         user_id: Set(user.id),
