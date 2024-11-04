@@ -2,7 +2,7 @@
 use ::entity::prelude::*;
 use anyhow::{anyhow, Context, Result};
 use entity::{tokens, trade_orders, wallets};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use solana_account_decoder::UiAccountData;
 use solana_sdk::{
   bs58,
@@ -383,5 +383,37 @@ pub async fn get_token_details(contract_address: &str) -> Result<TokenDetails> {
     mint_address: contract_address.to_string(),
     decimals,
     mint_public_key: token_account.address.to_string(),
+  })
+}
+
+pub async fn find_or_create_token(
+  db: &DatabaseConnection,
+  token: &TokenDetails,
+  ca: &str,
+) -> Result<i32> {
+  let existing_token = tokens::Entity::find()
+    .filter(tokens::Column::ContractAddress.eq(ca))
+    .one(db)
+    .await
+    .map_err(|e| anyhow!("Database error: {}", e))?;
+
+  Ok(if let Some(existing_token) = existing_token {
+    existing_token.id
+  } else {
+    let new_token = tokens::ActiveModel {
+      contract_address: Set(ca.to_string()),
+      token_public_key: Set(None),
+      chain: Set("solana".to_string()),
+      decimals: Set(Some(token.decimals as i32)),
+      name: Set(None),
+      metadata: Set(None),
+      ..Default::default()
+    };
+
+    tokens::Entity::insert(new_token)
+      .exec(db)
+      .await
+      .map_err(|e| anyhow!("Failed to insert token: {}", e))?
+      .last_insert_id
   })
 }
