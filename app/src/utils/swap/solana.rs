@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use anyhow::{anyhow, Context, Result};
-use entity::wallets;
-use sea_orm::{DatabaseConnection, EntityTrait};
+use entity::{onchain_transactions, trade_orders, wallets};
+use sea_orm::{DatabaseConnection, EntityTrait, Set};
 use solana_client::nonblocking::rpc_client::RpcClient as AsyncClient;
 
 use solana_sdk::{
@@ -12,9 +12,12 @@ use solana_sdk::{
 use std::env;
 use std::time::Duration;
 
-use crate::utils::{
-  encryption::{decrypt_private_key, EncryptPKDetails},
-  wallets::solana::keypair_from_private_key,
+use crate::{
+  integrations::raydium::RaydiumPriceFetcher,
+  utils::{
+    encryption::{decrypt_private_key, EncryptPKDetails},
+    wallets::solana::keypair_from_private_key,
+  },
 };
 
 const MAX_RETRIES: u32 = 3;
@@ -352,4 +355,158 @@ pub async fn execute_user_swap_txs(
     transaction_hash: last_signature.to_string(),
     success: is_confirmed,
   })
+}
+
+#[derive(Debug)]
+pub struct TradeParams {
+  pub sol_price: f64,
+  pub token_price: f64,
+  pub buy_size_percentage: f64,
+  pub launch_size_lower_limit: f64,
+  pub launch_stop_loss: f32,
+}
+
+pub async fn record_transaction(
+  db: &DatabaseConnection,
+  user_id: i32,
+  wallet_id: i32,
+  contract_address: &str,
+  attempt: SwapTxResult,
+  size: f64,
+  size_usd: f64,
+) -> Result<()> {
+  let transaction = onchain_transactions::ActiveModel {
+    user_id: Set(user_id),
+    wallet_id: Set(wallet_id),
+    transaction_hash: Set(Some(attempt.transaction_hash)),
+    chain: Set("solana".to_string()),
+    source: Set(Some("raydium".to_string())),
+    status: Set(Some(
+      if attempt.success {
+        "confirmed"
+      } else {
+        "submitted"
+      }
+      .to_string(),
+    )),
+    r#type: Set(Some("swap".to_string())),
+    value_native: Set(Some(size as f32)),
+    value_usd: Set(Some(size_usd as f32)),
+    from_token: Set(Some(
+      "So11111111111111111111111111111111111111112".to_string(),
+    )),
+    to_token: Set(Some(contract_address.to_string())),
+    ..Default::default()
+  };
+
+  onchain_transactions::Entity::insert(transaction)
+    .exec(db)
+    .await
+    .context("Failed to record transaction: {}")?;
+
+  Ok(())
+}
+
+pub async fn create_stop_loss_order(
+  db: &DatabaseConnection,
+  user_id: i32,
+  wallet_id: i32,
+  token_id: i32,
+  contract_address: &str,
+  params: &TradeParams,
+) -> Result<()> {
+  // Calculate stop loss target price
+  let stop_loss_target_price =
+    params.token_price * (1.0 - (params.launch_stop_loss as f64 / 100.0));
+
+  let new_trade_order = trade_orders::ActiveModel {
+    user_id: Set(user_id),
+    wallet_id: Set(wallet_id),
+    token_id: Set(token_id),
+    contract_address: Set(contract_address.to_string()),
+    reference_price: Set(params.token_price as f32),
+    target_percentage: Set(params.launch_stop_loss),
+    target_price: Set(stop_loss_target_price as f32),
+    strategy: Set("launch_stop_loss".to_string()),
+    created_by: Set("app".to_string()),
+    metadata: Set(None),
+    // status: Set("active".to_string()),
+    ..Default::default()
+  };
+
+  trade_orders::Entity::insert(new_trade_order)
+    .exec(db)
+    .await
+    .context("Failed to create stop loss order: {}")?;
+
+  Ok(())
+}
+
+pub async fn execute_buy_trade(
+  user_id: i32,
+  wallet_id: i32,
+  ca: &str,
+  buy_size: f64,
+  wallet_address: &str,
+  db: &DatabaseConnection,
+) -> Result<SwapTxResult> {
+  let raydium_client = RaydiumPriceFetcher::new();
+
+  let quote = raydium_client
+    .get_swap_quote(
+      "So11111111111111111111111111111111111111112",
+      ca,
+      &(buy_size * 1_000_000_000.0).to_string(),
+      "50",
+    )
+    .await
+    .context("Failed to get quote: {}")?;
+
+  let swap_tx = raydium_client
+    .get_swap_tx(
+      wallet_address,
+      quote,
+      "So11111111111111111111111111111111111111112",
+      ca,
+      wallet_address,
+    )
+    .await
+    .map_err(|e| anyhow!("Failed to get transaction: {}", e))?;
+
+  execute_user_swap_txs(user_id, wallet_id, db.clone(), swap_tx).await
+}
+
+pub async fn execute_sell_trade(
+  user_id: i32,
+  wallet_id: i32,
+  ca: &str,
+  sell_size: f64,
+  wallet_address: &str,
+  db: &DatabaseConnection,
+  _decimals: u8,
+) -> Result<SwapTxResult> {
+  let raydium_client = RaydiumPriceFetcher::new();
+
+  let quote = raydium_client
+    .get_swap_quote(
+      ca,
+      "So11111111111111111111111111111111111111112",
+      &(sell_size).to_string(),
+      "50",
+    )
+    .await
+    .context("Failed to get quote: {}")?;
+
+  let swap_tx = raydium_client
+    .get_swap_tx(
+      wallet_address,
+      quote,
+      "So11111111111111111111111111111111111111112",
+      ca,
+      wallet_address,
+    )
+    .await
+    .map_err(|e| anyhow!("Failed to get transaction: {}", e))?;
+
+  execute_user_swap_txs(user_id, wallet_id, db.clone(), swap_tx).await
 }

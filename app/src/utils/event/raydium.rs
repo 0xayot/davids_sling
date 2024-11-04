@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use entity::{onchain_transactions, raydium_token_launches, trade_orders, users, wallets};
+use entity::{raydium_token_launches, users, wallets};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -10,14 +10,11 @@ use tokio::{
 
 use crate::{
   db,
-  integrations::{
-    dexscreener::{self},
-    raydium::RaydiumPriceFetcher,
-  },
+  integrations::dexscreener::{self},
   utils::{
-    notifications::notify_user_by_telegram,
+    notifications::{notify_user_by_telegram, notify_users},
     price::solana::fetch_token_price,
-    swap::solana::{execute_user_swap_txs, SwapTxResult},
+    swap::solana::{create_stop_loss_order, execute_buy_trade, record_transaction, TradeParams},
     wallets::solana::{find_or_create_token, get_token_details, get_wallet_sol_balance},
   },
 };
@@ -275,36 +272,6 @@ pub async fn handle_token_created_event(data: RaydiumTokenEvent) {
   // TODO: let is_boosted_token = /* Your logic to determine if the token is boosted */;
 }
 
-pub async fn notify_users(msg: String, db: &DatabaseConnection) -> Result<()> {
-  let users = users::Entity::find()
-    .filter(users::Column::TgId.is_not_null())
-    .all(db) // Dereferencing Arc to get a reference to DatabaseConnection
-    .await
-    .context("Database error")?;
-
-  let mut tasks = vec![];
-
-  for user in users {
-    let tg_id_string = user.tg_id.clone(); // Clone to avoid ownership issues
-    let message = msg.clone();
-
-    // Attempt to parse tg_id, skip iteration if it fails
-    if let Ok(tg_id) = tg_id_string.parse::<i64>() {
-      let task = tokio::spawn(async move {
-        if let Err(e) = notify_user_by_telegram(tg_id, &message).await {
-          eprintln!("Error notifying user {}: {}", tg_id, e);
-        }
-      });
-      tasks.push(task);
-    } else {
-      eprintln!("Skipping user with invalid tg_id: {}", tg_id_string);
-    }
-  }
-  futures::future::join_all(tasks).await;
-
-  Ok(())
-}
-
 // at the moment we do not have a system for actually storing the settings of each user so all users with TG get coins as the launch 😬
 pub async fn buy_token_on_launch(ca: &str, db: DatabaseConnection) -> Result<()> {
   let users = users::Entity::find()
@@ -401,6 +368,7 @@ async fn process_user_trade(
   let buy_size_usd = buy_size * params.sol_price;
 
   if buy_size < params.launch_size_lower_limit {
+    // create a stop loss with an arbitrary amount to track the sell price
     return Ok(());
   }
 
@@ -424,125 +392,6 @@ async fn process_user_trade(
       eprintln!("Error notifying user {}: {}", tg_id_parsed, e);
     }
   }
-
-  Ok(())
-}
-
-#[derive(Debug)]
-struct TradeParams {
-  sol_price: f64,
-  token_price: f64,
-  buy_size_percentage: f64,
-  launch_size_lower_limit: f64,
-  launch_stop_loss: f32,
-}
-
-async fn execute_buy_trade(
-  user_id: i32,
-  wallet_id: i32,
-  ca: &str,
-  buy_size: f64,
-  wallet_address: &str,
-  db: &DatabaseConnection,
-) -> Result<SwapTxResult> {
-  let raydium_client = RaydiumPriceFetcher::new();
-
-  let quote = raydium_client
-    .get_swap_quote(
-      "So11111111111111111111111111111111111111112",
-      ca,
-      &(buy_size * 1_000_000_000.0).to_string(),
-      "50",
-    )
-    .await
-    .context("Failed to get quote: {}")?;
-
-  let swap_tx = raydium_client
-    .get_swap_tx(
-      wallet_address,
-      quote,
-      "So11111111111111111111111111111111111111112",
-      ca,
-      wallet_address,
-    )
-    .await
-    .map_err(|e| anyhow!("Failed to get transaction: {}", e))?;
-
-  execute_user_swap_txs(user_id, wallet_id, db.clone(), swap_tx).await
-}
-
-async fn record_transaction(
-  db: &DatabaseConnection,
-  user_id: i32,
-  wallet_id: i32,
-  contract_address: &str,
-  attempt: SwapTxResult,
-  buy_size: f64,
-  buy_size_usd: f64,
-) -> Result<()> {
-  let transaction = onchain_transactions::ActiveModel {
-    user_id: Set(user_id),
-    wallet_id: Set(wallet_id),
-    transaction_hash: Set(Some(attempt.transaction_hash)),
-    chain: Set("solana".to_string()),
-    source: Set(Some("raydium".to_string())),
-    status: Set(Some(
-      if attempt.success {
-        "confirmed"
-      } else {
-        "submitted"
-      }
-      .to_string(),
-    )),
-    r#type: Set(Some("swap".to_string())),
-    value_native: Set(Some(buy_size as f32)),
-    value_usd: Set(Some(buy_size_usd as f32)),
-    from_token: Set(Some(
-      "So11111111111111111111111111111111111111112".to_string(),
-    )),
-    to_token: Set(Some(contract_address.to_string())),
-    ..Default::default()
-  };
-
-  onchain_transactions::Entity::insert(transaction)
-    .exec(db)
-    .await
-    .context("Failed to record transaction: {}")?;
-
-  Ok(())
-}
-
-async fn create_stop_loss_order(
-  db: &DatabaseConnection,
-  user_id: i32,
-  wallet_id: i32,
-  token_id: i32,
-  contract_address: &str,
-  params: &TradeParams,
-) -> Result<()> {
-  // Calculate stop loss target price
-  let stop_loss_target_price =
-    params.token_price * (1.0 - (params.launch_stop_loss as f64 / 100.0));
-
-  let new_trade_order = trade_orders::ActiveModel {
-    user_id: Set(user_id),
-    wallet_id: Set(wallet_id),
-    token_id: Set(token_id),
-    contract_address: Set(contract_address.to_string()),
-    reference_price: Set(params.token_price as f32),
-    target_percentage: Set(params.launch_stop_loss),
-    target_price: Set(stop_loss_target_price as f32),
-    strategy: Set("launch_stop_loss".to_string()),
-    created_by: Set("app".to_string()),
-    metadata: Set(None),
-    // status: Set("active".to_string()),
-    ..Default::default()
-  };
-
-  trade_orders::Entity::insert(new_trade_order)
-    .exec(db)
-    .await
-    .context("Failed to create stop loss order: {}")?;
 
   Ok(())
 }
