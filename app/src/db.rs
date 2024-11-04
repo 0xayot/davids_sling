@@ -26,7 +26,7 @@ pub async fn connect_db() -> DBConnection {
   // // //    conn
   // // let _db = Database::connect(db_url).await?;
   // // Ok(())
-  let conn = Database::connect(&db_url).await.unwrap();
+  let conn = Database::connect(&db_url).await?;
   // //    conn
   // let _db = Database::connect(db_url).await?;
   return Ok(conn);
