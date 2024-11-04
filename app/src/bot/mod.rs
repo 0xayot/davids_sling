@@ -1,7 +1,3 @@
-use ::entity::*;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
-use teloxide::{prelude::*, utils::command::BotCommands};
-
 use crate::{
   db,
   utils::{
@@ -10,6 +6,13 @@ use crate::{
     wallets::solana::{generate_wallet, recover_wallet_from_private_key},
   },
 };
+use ::entity::*;
+use commands::trade::handle_buy_token;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use teloxide::{prelude::*, utils::command::BotCommands};
+
+mod commands;
+
 #[derive(BotCommands, Clone)]
 #[command(
   rename_rule = "lowercase",
@@ -34,13 +37,14 @@ pub enum Command {
   AddSolWallet { pk: String, title: String },
   #[command(description = "Create new sol wallet")]
   CreateSolWallet,
+  #[command(description = "attempt to buy a token", parse_with = "split")]
+  BuyToken { ca: String, size: String },
 }
 
 pub async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
   let db = db::connect_db()
     .await
     .expect("Failed to connect to the database");
-  println!("{:?}", msg);
 
   match cmd {
     Command::Help => {
@@ -48,6 +52,7 @@ pub async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> 
         .send_message(msg.chat.id, Command::descriptions().to_string())
         .await?
     }
+    // TODO
     Command::WatchSolWallet(address) => {
       bot
         .send_message(msg.chat.id, format!("Your address is @{address}."))
@@ -215,6 +220,15 @@ pub async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> 
 
       // Send the response message
       bot.send_message(msg.chat.id, response_message).await?
+    }
+    Command::BuyToken { ca, size } => {
+      match handle_buy_token(bot.clone(), msg.clone(), &db, ca.clone(), size.clone()).await {
+        Ok(message) => message,
+        Err(e) => {
+          eprintln!("Failed to buy {:?}", e);
+          bot.send_message(msg.chat.id, "An error occured").await?
+        }
+      }
     }
   };
 
