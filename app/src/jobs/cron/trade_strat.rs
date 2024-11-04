@@ -83,8 +83,8 @@ async fn process_single_order(
     .get_swap_tx(
       &wallet.address,
       quote,
-      "So11111111111111111111111111111111111111112",
       &token.contract_address,
+      "So11111111111111111111111111111111111111112",
       token_public_key,
     )
     .await
