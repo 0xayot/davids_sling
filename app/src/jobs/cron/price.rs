@@ -1,7 +1,7 @@
 use crate::{
   db,
   integrations::{dexscreener, raydium::RaydiumPriceFetcher},
-  utils::cache,
+  utils::{cache, event::price::handle_price_update},
 };
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use entity::{raydium_token_launches, token_prices as prices, tokens};
@@ -65,6 +65,8 @@ pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>
 
   futures::future::join_all(tasks).await;
 
+  let _ = db.close().await;
+
   Ok(())
 }
 
@@ -89,6 +91,8 @@ pub async fn refresh_sol_tokens_to_watch() -> () {
     }
   }
   cache::set_memcache_string("token_addresses".to_owned(), token_addresses, Some(5 * 3));
+
+  let _ = db.close().await;
 }
 
 use std::error::Error;
@@ -97,19 +101,17 @@ pub async fn track_launch_event_token_prices() -> Result<(), Box<dyn Error>> {
   let db = db::connect_db()
     .await
     .expect("Failed to connect to the database");
-  let today = Utc::now().date_naive(); // This gives you a Date<Utc>
+  let today = Utc::now().date_naive();
 
   // Create NaiveDate for today without time zone info
   let naive_today = NaiveDate::from_ymd_opt(today.year(), today.month(), today.day())
     .expect("Failed to create NaiveDate");
 
-  // Define the start and end of the day
   let start_of_day = naive_today.and_hms_opt(0, 0, 0);
 
   let launches = raydium_token_launches::Entity::find()
     .filter(raydium_token_launches::Column::Evaluation.eq("track"))
     .filter(raydium_token_launches::Column::CreatedAt.gt(start_of_day))
-    // .filter(raydium_token_launches::Column::CreatedAt.(end_of_day))
     .all(&db)
     .await
     .map_err(|e| format!("Database error: {}", e))?;
@@ -165,6 +167,13 @@ pub async fn track_launch_event_token_prices() -> Result<(), Box<dyn Error>> {
               );
             }
           } else {
+            tokio::spawn(async move {
+              if let Err(e) =
+                handle_price_update(&launch.contract_address, (price_usd as f64)).await
+              {
+                eprintln!("Error handling price update: {:?}", e);
+              }
+            });
             // Update the meta field of the launch if it's empty with a JSON of the pair
             if launch.meta.is_none() {
               let meta_update_model = raydium_token_launches::ActiveModel {
@@ -177,10 +186,7 @@ pub async fn track_launch_event_token_prices() -> Result<(), Box<dyn Error>> {
                 .exec(&db_clone)
                 .await
               {
-                eprintln!(
-                  "Failed to update meta for {}: {}",
-                  launch.contract_address, e
-                );
+                eprintln!("Failed to update meta for: {}", e);
               }
             }
           }
