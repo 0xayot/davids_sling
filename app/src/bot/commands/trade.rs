@@ -97,7 +97,7 @@ pub async fn handle_buy_token(
           .to_string(),
         )),
         r#type: Set(Some("swap".to_string())),
-        value_native: Set(Some(0.0)),
+        value_native: Set(Some(size_f64 as f32)),
         value_usd: Set(Some(0.0)),
         from_token: Set(Some(ca.clone())),
         to_token: Set(Some(

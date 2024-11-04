@@ -248,7 +248,7 @@ impl RaydiumPriceFetcher {
     swap_quote: Value,
     input_mint: &str,
     output_mint: &str,
-    tokenPk: &str,
+    _tokenPk: &str,
   ) -> Result<Vec<VersionedTransaction>> {
     let url_base = env::var("RAYDIUM_SWAP_URL")
       .unwrap_or_else(|_| "https://transaction-v1.raydium.io".to_string());
