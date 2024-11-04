@@ -3,18 +3,25 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "token_prices")]
+#[sea_orm(table_name = "raydium_token_launches")]
 pub struct Model {
   #[sea_orm(primary_key)]
   pub id: i32,
   #[sea_orm(unique)]
   pub contract_address: String,
-  pub chain: String,
-  pub name: Option<String>,
+  pub creator_address: String,
+  pub evaluation: Option<String>,
+  pub launch_class: Option<String>,
+  #[sea_orm(column_type = "Float")]
+  pub launch_liquidity: f32,
+  #[sea_orm(column_type = "Float")]
+  pub launch_liquidity_usd: f32,
   #[sea_orm(column_type = "Float", nullable)]
-  pub price: Option<f32>,
-  #[sea_orm(column_type = "Float", nullable)]
-  pub price_native: Option<f32>,
+  pub launch_price_usd: Option<f32>,
+  pub rugged_at: Option<i32>,
+  pub lifespan: Option<i32>,
+  pub meta: Option<Json>,
+  pub has_boost: Option<bool>,
   pub created_at: DateTime,
   pub updated_at: DateTime,
 }

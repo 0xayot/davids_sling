@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use actix_web::HttpRequest;
+use anyhow::Ok;
 use entity::users;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use sea_orm::{DatabaseConnection, EntityTrait};
@@ -102,4 +103,22 @@ pub async fn req_user(req: HttpRequest, db: &DatabaseConnection) -> Option<users
 
   // Find the user by ID and return
   Users::find_by_id(claims.sub).one(db).await.ok()?
+}
+
+pub fn authorize_davids_sight(req: &HttpRequest) -> bool {
+  use std::result::Result::Ok;
+
+  let secret = match env::var("DAVIDS_SIGHT_KEY") {
+    Ok(key) => key,
+    Err(_) => return false, // Return false if the environment variable is not set
+  };
+
+  // Attempt to get the "x-davids-pouch-key" header
+  if let Some(api_key) = req.headers().get("x-davids-pouch-key") {
+    if let Ok(api_key_str) = api_key.to_str() {
+      return secret == api_key_str;
+    }
+  }
+
+  false
 }

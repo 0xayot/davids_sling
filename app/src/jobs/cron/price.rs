@@ -1,5 +1,10 @@
-use crate::{db, integrations::raydium::RaydiumPriceFetcher, utils::cache};
-use entity::{token_prices as prices, tokens};
+use crate::{
+  db,
+  integrations::{dexscreener, raydium::RaydiumPriceFetcher},
+  utils::{cache, event::price::handle_price_update},
+};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use entity::{raydium_token_launches, token_prices as prices, tokens};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
 
 pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +21,7 @@ pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>
   let mut tasks = vec![];
 
   for token in tokens {
-    let db_clone = db.clone(); // Clone the DB connection for use in the task
+    let db_clone = db.clone();
     let contract_address = token.contract_address.clone();
 
     let task = tokio::spawn(async move {
@@ -60,6 +65,8 @@ pub async fn refresh_sol_token_prices() -> Result<(), Box<dyn std::error::Error>
 
   futures::future::join_all(tasks).await;
 
+  let _ = db.close().await;
+
   Ok(())
 }
 
@@ -84,4 +91,120 @@ pub async fn refresh_sol_tokens_to_watch() -> () {
     }
   }
   cache::set_memcache_string("token_addresses".to_owned(), token_addresses, Some(5 * 3));
+
+  let _ = db.close().await;
+}
+
+use std::error::Error;
+
+pub async fn track_launch_event_token_prices() -> Result<(), Box<dyn Error>> {
+  let db = db::connect_db()
+    .await
+    .expect("Failed to connect to the database");
+  let today = Utc::now().date_naive();
+
+  // Create NaiveDate for today without time zone info
+  let naive_today = NaiveDate::from_ymd_opt(today.year(), today.month(), today.day())
+    .expect("Failed to create NaiveDate");
+
+  let start_of_day = naive_today.and_hms_opt(0, 0, 0);
+
+  let launches = raydium_token_launches::Entity::find()
+    .filter(raydium_token_launches::Column::Evaluation.eq("track"))
+    .filter(raydium_token_launches::Column::CreatedAt.gt(start_of_day))
+    .all(&db)
+    .await
+    .map_err(|e| format!("Database error: {}", e))?;
+
+  println!("\n track launch \n {:?}", launches.len());
+
+  for launch in launches {
+    match dexscreener::fetch_token_data(&launch.contract_address).await {
+      Ok(data) => {
+        let db_clone = db.clone();
+
+        if let Some(pair) = data.pairs.get(0) {
+          let price_usd = pair.priceUsd.parse::<f32>().unwrap_or(0.0);
+          let price_sol = pair.priceNative.parse::<f32>().unwrap_or(0.0);
+          let liquidity = pair.liquidity.usd;
+
+          let current_price = prices::ActiveModel {
+            contract_address: Set(launch.contract_address.clone()),
+            chain: Set("solana".to_string()),
+            price: Set(Some(price_usd)),
+            price_native: Set(Some(price_sol)),
+            ..Default::default()
+          };
+
+          if let Err(e) = prices::Entity::insert(current_price).exec(&db_clone).await {
+            eprintln!(
+              "Failed to insert price for {}: {}",
+              launch.contract_address, e
+            );
+          }
+
+          let rug_liquidity = liquidity * 0.8;
+          // If the token loses more than 70% of its launch liquidity, it has rugged
+          if liquidity <= rug_liquidity {
+            let created_at: DateTime<Utc> = launch.created_at.and_utc();
+
+            let lifespan = (Utc::now() - created_at).num_seconds() as i32;
+
+            let lifespan_update_model = raydium_token_launches::ActiveModel {
+              id: Set(launch.id),
+              lifespan: Set(Some(lifespan)),
+              evaluation: Set(Some("rugged".to_string())),
+              ..Default::default()
+            };
+
+            if let Err(e) = raydium_token_launches::Entity::update(lifespan_update_model)
+              .exec(&db_clone)
+              .await
+            {
+              eprintln!(
+                "Failed to update lifespan and evaluation for {}: {}",
+                launch.contract_address, e
+              );
+            }
+          } else {
+            tokio::spawn(async move {
+              if let Err(e) =
+                handle_price_update(&launch.contract_address, (price_usd as f64)).await
+              {
+                eprintln!("Error handling price update: {:?}", e);
+              }
+            });
+            // Update the meta field of the launch if it's empty with a JSON of the pair
+            if launch.meta.is_none() {
+              let meta_update_model = raydium_token_launches::ActiveModel {
+                id: Set(launch.id),
+                meta: Set(Some(serde_json::to_value(pair).unwrap())),
+                ..Default::default()
+              };
+
+              if let Err(e) = raydium_token_launches::Entity::update(meta_update_model)
+                .exec(&db_clone)
+                .await
+              {
+                eprintln!("Failed to update meta for: {}", e);
+              }
+            }
+          }
+        } else {
+          eprintln!(
+            "No pairs found for contract address: {}",
+            launch.contract_address
+          );
+        }
+      }
+      Err(e) => {
+        eprintln!(
+          "Failed to fetch token data for {}: {}",
+          launch.contract_address, e
+        );
+      }
+    }
+  }
+
+  Ok(())
 }

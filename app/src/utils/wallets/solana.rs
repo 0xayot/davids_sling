@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 use ::entity::prelude::*;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use entity::{tokens, trade_orders, wallets};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use solana_account_decoder::UiAccountData;
 use solana_sdk::{
   bs58,
   signer::{keypair::Keypair, Signer},
 };
 
-use solana_client::{rpc_client::RpcClient, rpc_request::TokenAccountsFilter};
+use solana_client::rpc_request::TokenAccountsFilter;
 use solana_sdk::pubkey::Pubkey;
 
 use std::{env, str::FromStr};
@@ -88,10 +88,10 @@ pub fn keypair_from_private_key(private_key: &str) -> Result<Keypair> {
 
 #[derive(Debug)]
 pub struct TokenInfo {
-  mint_address: String,
-  token_balance: f64,
-  decimals: u8,
-  mint_public_key: String,
+  pub mint_address: String,
+  pub token_balance: f64,
+  pub decimals: u8,
+  pub mint_public_key: String,
 }
 
 #[derive(Debug)]
@@ -150,11 +150,21 @@ pub async fn get_spl_tokens_in_wallet(
   Ok(tokens)
 }
 
-pub fn get_wallet_sol_balance(address: &str) -> f64 {
-  let owner_pubkey = Pubkey::from_str(address).unwrap();
-  let rpc_url = env::var("SOLANA_RPC_URL");
-  let connection = RpcClient::new(rpc_url.unwrap());
-  connection.get_balance(&owner_pubkey).unwrap() as f64
+pub async fn get_wallet_sol_balance(address: &str) -> Result<f64> {
+  let owner_pubkey =
+    Pubkey::from_str(address).map_err(|e| anyhow!("Invalid Solana address: {}", e))?;
+
+  let rpc_url = env::var("SOLANA_RPC_URL")
+    .map_err(|_| anyhow!("SOLANA_RPC_URL environment variable not set"))?;
+
+  let connection = AsyncClient::new(rpc_url);
+
+  let lamports = connection
+    .get_balance(&owner_pubkey)
+    .await
+    .map_err(|e| anyhow!("Failed to fetch balance: {}", e))?;
+
+  Ok(lamports as f64 / 1_000_000_000.0)
 }
 
 pub async fn register_wallet_tokens(
@@ -329,5 +339,81 @@ pub(crate) async fn get_token_balance(
   Ok(SplTokenBalance {
     amount: 0.0,
     ui_amount: 0.0,
+  })
+}
+
+#[derive(Debug)]
+pub struct TokenDetails {
+  pub mint_address: String,
+  pub decimals: u8,
+  pub mint_public_key: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct TokenMint {
+  pub mint_authority: Option<Pubkey>,   // Optional mint authority
+  pub supply: u64,                      // Total supply
+  pub decimals: u8,                     // Number of decimals
+  pub is_initialized: bool,             // Indicates if initialized
+  pub freeze_authority: Option<Pubkey>, // Optional freeze authority
+}
+pub async fn get_token_details(contract_address: &str) -> Result<TokenDetails> {
+  // check cache here
+  let rpc_url = env::var("SOLANA_RPC_URL")?;
+  let client = AsyncClient::new(rpc_url);
+
+  let pubkey = Pubkey::from_str(contract_address)?;
+
+  let token_supply = client.get_token_supply(&pubkey).await?;
+
+  let decimals = token_supply.decimals;
+
+  // Get largest token account for this mint
+  let token_account = client
+    .get_token_largest_accounts(&pubkey)
+    .await?
+    .first()
+    .cloned()
+    .ok_or_else(|| anyhow::anyhow!("No token accounts found"))?;
+
+  println!("token account: {:?}", token_account);
+
+  // set to cache here
+  Ok(TokenDetails {
+    mint_address: contract_address.to_string(),
+    decimals,
+    mint_public_key: token_account.address.to_string(),
+  })
+}
+
+pub async fn find_or_create_token(
+  db: &DatabaseConnection,
+  token: &TokenDetails,
+  ca: &str,
+) -> Result<i32> {
+  let existing_token = tokens::Entity::find()
+    .filter(tokens::Column::ContractAddress.eq(ca))
+    .one(db)
+    .await
+    .map_err(|e| anyhow!("Database error: {}", e))?;
+
+  Ok(if let Some(existing_token) = existing_token {
+    existing_token.id
+  } else {
+    let new_token = tokens::ActiveModel {
+      contract_address: Set(ca.to_string()),
+      token_public_key: Set(None),
+      chain: Set("solana".to_string()),
+      decimals: Set(Some(token.decimals as i32)),
+      name: Set(None),
+      metadata: Set(None),
+      ..Default::default()
+    };
+
+    tokens::Entity::insert(new_token)
+      .exec(db)
+      .await
+      .map_err(|e| anyhow!("Failed to insert token: {}", e))?
+      .last_insert_id
   })
 }

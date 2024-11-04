@@ -1,7 +1,8 @@
 //  https://github.com/patrick-fitzgerald/actix-web-cron-example/blob/main/src/main.rs
 
 use crate::jobs::cron::{
-  price::refresh_sol_token_prices, trade_strat::default_stop_loss_strategy_solana,
+  price::{refresh_sol_token_prices, track_launch_event_token_prices},
+  trade_strat::default_stop_loss_strategy_solana,
   wallets::update_wallet_token_list,
 };
 
@@ -45,11 +46,17 @@ pub async fn start_cron() {
     }
   });
 
+  let run_track_spied_launch = every(10).seconds().in_timezone(&Utc).perform(|| async {
+    println!(" running track token launch lifespan - {:?}", Local::now());
+    if let Err(err) = track_launch_event_token_prices().await {
+      eprintln!("Failed to update prices {:?}", err);
+    }
+  });
+
   tokio::spawn(every_second);
   tokio::spawn(refresh_sol_tokens_to_watch);
   tokio::spawn(sol_price_update);
   tokio::spawn(update_spl_tokens_in_wallet);
   tokio::spawn(run_default_stop_loss);
-
-  // sol_price_update.await;
+  tokio::spawn(run_track_spied_launch);
 }

@@ -6,6 +6,7 @@ mod m20241014_175742_create_price_table;
 mod m20241014_191627_create_token_table;
 mod m20241014_194139_create_trade_orders_table;
 mod m20241019_002947_create_onchain_transactions;
+mod m20241101_020551_create_raydium_launch_token;
 
 pub struct Migrator;
 
@@ -19,6 +20,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20241014_191627_create_token_table::Migration),
             Box::new(m20241014_194139_create_trade_orders_table::Migration),
             Box::new(m20241019_002947_create_onchain_transactions::Migration),
+            Box::new(m20241101_020551_create_raydium_launch_token::Migration),
         ]
   }
 }

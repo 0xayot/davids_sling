@@ -15,8 +15,7 @@ impl MigrationTrait for Migration {
           .col(
             ColumnDef::new(TokenPrice::ContractAddress)
               .string()
-              .not_null()
-              .unique_key(),
+              .not_null(),
           )
           .col(ColumnDef::new(TokenPrice::Chain).string().not_null())
           .col(ColumnDef::new(TokenPrice::Name).string())
