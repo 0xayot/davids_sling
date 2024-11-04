@@ -3,13 +3,11 @@ use actix_web::{get, middleware::Logger, App, HttpResponse, HttpServer, Responde
 
 use bot::{answer, Command};
 use dotenvy::dotenv;
-use integrations::raydium::RaydiumPriceFetcher;
 use jobs::cron::cron::start_cron;
 use std::env;
 use std::sync::Arc;
 use teloxide::{prelude::*, utils::command::BotCommands};
 use tokio::join;
-use utils::cache::set_memcache_string;
 
 mod bot;
 mod db;
@@ -29,52 +27,13 @@ async fn hello() -> impl Responder {
     Err(e) => eprintln!("Could not read DATABASE_URL: {}", e),
   }
 
-  let raydium_client = RaydiumPriceFetcher::new();
+  // let analyzer = PriceAnalyzer::new(3, 1.0);
 
-  // let p = raydium_client
-  //   .get_swap_quote(
-  //     "So11111111111111111111111111111111111111112",
-  //     "5z3EqYQo9HiCEs3R84RCDMu2n7anpDMxRhdK8PSWmrRC",
-  //     "100000000",
-  //     "50",
-  //   )
-  //   .await;
+  // let prices = vec![100.0, 102.0, 97.0, 108.0];
 
-  // println!("{:?}", p.unwrap());
-  // // print!("{}", p);
+  // let trend = analyzer.analyze_trend(&prices);
 
-  // let x = raydium_client.get_priority_fee().await;
-
-  // println!("{:?}", x.unwrap());
-  // let input_mint = "5z3EqYQo9HiCEs3R84RCDMu2n7anpDMxRhdK8PSWmrRC";
-
-  // let wrap_sol = input_mint == "So11111111111111111111111111111111111111112";
-
-  // let swap_tx = raydium_client
-  //   .get_swap_tx(
-  //     "Hj3G1N1NXvvNaWE7KREM5vskNjpn4ofPvFHZ97gWh9cX",
-  //     p.unwrap(),
-  //     "So11111111111111111111111111111111111111112",
-  //     input_mint,
-  //     "E2s1dLtMtUx58tSC5h2cprDmP9259EBjRUo9XV2repft",
-  //   )
-  //   .await;
-
-  // println!("{:?} {:?}", wrap_sol, swap_tx.unwrap());
-
-  // let x = raydium_client
-  //   .get_token_price_list(Some(
-  //     "5z3EqYQo9HiCEs3R84RCDMu2n7anpDMxRhdK8PSWmrRC,So11111111111111111111111111111111111111112"
-  //       .to_owned(),
-  //   ))
-  //   .await;
-
-  // let z = raydium_client
-  //   .get_token_price_in_usd("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
-  //   .await
-  //   .unwrap();
-
-  // println!("{}", z);
+  // println!("Dance {:?}", trend);
 
   HttpResponse::Ok().body("Hello world!")
 }
@@ -102,11 +61,9 @@ async fn main() -> std::io::Result<()> {
   log::info!("Starting HTTP server on port 9000");
   log::info!("GraphiQL playground: http://localhost:9000/graphiql");
 
-  set_memcache_string("test".to_string(), "rest".to_string(), Some(60));
-
-  // actix_rt::spawn(async move {
-  //   start_cron().await;
-  // });
+  actix_rt::spawn(async move {
+    start_cron().await;
+  });
 
   // Create and run the Actix server
   let server = HttpServer::new(move || {
